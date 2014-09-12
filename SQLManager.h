@@ -6,11 +6,6 @@
 //  Copyright (c) 2013年 383541328@qq.com All rights reserved.
 //
 #import <Foundation/Foundation.h>
-//
-#ifndef SQLManager_h
-#define SQLManager_h
-    #define SQLITE_VOID       1978
-#endif
 
 //********************************************
 @interface SQLTransaction : NSObject
