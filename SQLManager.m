@@ -6,6 +6,12 @@
 //  Copyright (c) 2013年 383541328@qq.com All rights reserved.
 //
 
+//
+#ifndef SQLManager_m
+#define SQLManager_m
+    #define SQLITE_VOID       1978
+#endif
+
 #import "SQLManager.h"
 #import <objc/runtime.h>
 #import "sqlite3.h"
