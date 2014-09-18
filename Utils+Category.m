@@ -3,7 +3,7 @@
 //  Board2D
 //
 //  Created by mac on 14-5-4.
-//  Copyright (c) 2014年 e360. All rights reserved.
+//  Copyright (c) 2014年 383541328@qq.com. All rights reserved.
 //
 #ifndef Utils_Category_m
 #define Utils_Category_m
@@ -18,6 +18,7 @@
 #import "Utils+Category.h"
 #import <SystemConfiguration/SystemConfiguration.h>
 #import <CommonCrypto/CommonDigest.h>
+#import <CommonCrypto/CommonCrypto.h>
 #import <objc/runtime.h>
 #import <sys/utsname.h>
 #import <sys/socket.h>
@@ -222,6 +223,20 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 -(NetworkStatus)network{
     return network;
+}
+-(ScreenType)screen{
+    static ScreenType type=ScreenNULL;
+    if (type==ScreenNULL) {
+        CGSize screen=[[UIScreen mainScreen] bounds].size;
+        if (CGSizeEqualToSize(screen, CGSizeMake(768, 1024))) {
+            type=ScreenIpad;
+        }else if (CGSizeEqualToSize(screen, CGSizeMake(320, 480))) {
+            type=ScreenIphone;
+        }else if (CGSizeEqualToSize(screen, CGSizeMake(320, 568))) {
+            type=ScreenIphone5;
+        }
+    }
+    return type;
 }
 -(void)netWorkDidChange{
     NetworkStatus temp = NetworkNone;
@@ -449,12 +464,14 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text font:(UIFont*)font color:(UIColor*)color target:(id)target event:(SEL)event{
     UIButton *temp = [self.class viewWithFrame:frame parent:parent target:target event:event];
-    if (font && color) {
+    if (color) {
         [temp setTitleColor:color forState:UIControlStateNormal];
-        [temp.titleLabel setFont:font];
     }
     if (text) {
         [temp setTitle:text forState:UIControlStateNormal];
+    }
+    if (font) {
+        [temp.titleLabel setFont:font];
     }
     return temp;
 }
