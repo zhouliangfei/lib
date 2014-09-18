@@ -61,10 +61,17 @@ typedef NS_ENUM(NSInteger, NetworkStatus) {
     NetworkWiFi,
     NetworkWWAN
 };
+typedef NS_ENUM(NSInteger, ScreenType) {
+    ScreenNULL,
+    ScreenIpad,
+    ScreenIphone,
+    ScreenIphone5
+};
 
 UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIDevice(Utils_Category)
 @property(nonatomic,readonly) NetworkStatus network;
+@property(nonatomic,readonly) ScreenType screen;
 @end
 
 //UIImage****************************************
