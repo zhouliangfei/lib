@@ -3,7 +3,7 @@
 //  Board2D
 //
 //  Created by mac on 14-5-4.
-//  Copyright (c) 2014年 e360. All rights reserved.
+//  Copyright (c) 2014年 383541328@qq.com. All rights reserved.
 //
 #import <UIKit/UIKit.h>
 
