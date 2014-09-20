@@ -1,6 +1,6 @@
 //
 //  SQLManager.m
-//  dataTest
+//  lib
 //
 //  Created by mac on 13-6-17.
 //  Copyright (c) 2013年 383541328@qq.com All rights reserved.
