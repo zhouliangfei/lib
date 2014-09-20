@@ -1,6 +1,6 @@
 //
 //  NSObject+Category.m
-//  Board2D
+//  lib
 //
 //  Created by mac on 14-5-4.
 //  Copyright (c) 2014年 383541328@qq.com. All rights reserved.
@@ -199,7 +199,7 @@ NSString *const UIDeviceNetWorkDidChangeNotification = @"UIDeviceNetWorkDidChang
 @implementation UIDevice(Utils_Category)
 @dynamic network;
 //
-static NetworkStatus network=NetworkNone;
+static UIDeviceNetwork network;
 static SCNetworkReachabilityRef reachability=nil;
 static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void *info){
 	UIDevice *device = (UIDevice*)info;
@@ -208,51 +208,50 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 +(id)alloc{
     UIDevice *device=[UIDevice allocWithZone:NSDefaultMallocZone()];
     if (device) {
-        static dispatch_once_t onceToken;
-        dispatch_once(&onceToken, ^{
-            network=NetworkNone;
-            reachability=SCNetworkReachabilityCreateWithName(NULL, "0.0.0.0");
-            if(reachability) {
-                SCNetworkReachabilityContext context={0, ( void *)device, NULL, NULL, NULL};
-                SCNetworkReachabilitySetCallback(reachability, detectNetworkCallback, &context);
-                SCNetworkReachabilityScheduleWithRunLoop(reachability, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-            }
-        });
+        network=UIDeviceNetworkNone;
+        reachability=SCNetworkReachabilityCreateWithName(NULL, "0.0.0.0");
+        if(reachability) {
+            SCNetworkReachabilityContext context={0, ( void *)device, NULL, NULL, NULL};
+            SCNetworkReachabilitySetCallback(reachability, detectNetworkCallback, &context);
+            SCNetworkReachabilityScheduleWithRunLoop(reachability, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+            [device netWorkDidChange];
+        }
     }
     return device;
 }
--(NetworkStatus)network{
+-(UIDeviceNetwork)network{
     return network;
 }
--(ScreenType)screen{
-    static ScreenType type=ScreenNULL;
-    if (type==ScreenNULL) {
-        CGSize screen=[[UIScreen mainScreen] bounds].size;
-        if (CGSizeEqualToSize(screen, CGSizeMake(768, 1024))) {
-            type=ScreenIpad;
-        }else if (CGSizeEqualToSize(screen, CGSizeMake(320, 480))) {
-            type=ScreenIphone;
-        }else if (CGSizeEqualToSize(screen, CGSizeMake(320, 568))) {
-            type=ScreenIphone5;
+-(UIDeviceIdiom)idiom{
+    static UIDeviceIdiom type=UIDeviceIdiomNULL;
+    if (type==UIDeviceIdiomNULL) {
+        if(UI_USER_INTERFACE_IDIOM()==UIUserInterfaceIdiomPhone){
+            if ([[UIScreen mainScreen] bounds].size.height==568) {
+                type=UIDeviceIdiomIphone5;
+            }else{
+                type=UIDeviceIdiomIphone;
+            }
+        } else{
+            type=UIDeviceIdiomIpad;
         }
     }
     return type;
 }
 -(void)netWorkDidChange{
-    NetworkStatus temp = NetworkNone;
+    UIDeviceNetwork temp = UIDeviceNetworkNone;
     SCNetworkReachabilityFlags flags = 0;
     SCNetworkReachabilityGetFlags(reachability, &flags);
     if(flags & kSCNetworkReachabilityFlagsReachable){
         if((flags & kSCNetworkReachabilityFlagsConnectionRequired) == 0) {
-            temp = NetworkWiFi;
+            temp = UIDeviceNetworkWiFi;
         }
         if ((((flags & kSCNetworkReachabilityFlagsConnectionOnDemand ) != 0) || (flags & kSCNetworkReachabilityFlagsConnectionOnTraffic) != 0)){
             if ((flags & kSCNetworkReachabilityFlagsInterventionRequired) == 0){
-                temp = NetworkWiFi;
+                temp = UIDeviceNetworkWiFi;
             }
         }
         if ((flags & kSCNetworkReachabilityFlagsIsWWAN) == kSCNetworkReachabilityFlagsIsWWAN){
-            temp = NetworkWWAN;
+            temp = UIDeviceNetworkWWAN;
         }
     }
     if (temp != network) {
@@ -356,14 +355,14 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     const void *loaderKey="imageLoaderKey";
     NSLoader *loader = objc_getAssociatedObject(self, loaderKey);
     if (nil==loader) {
-        loader=[[[NSLoader alloc] init] autorelease];
+        loader=[[NSLoader alloc] init];
         objc_setAssociatedObject(self, loaderKey, loader, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [loader release];
     }
     //
     [self setImage:nil];
     [loader request:URL post:nil priority:NSLoaderCachePolicyLocalData complete:^(NSLoader *target) {
         [self setImage:[UIImage imageWithData:target.data]];
-        [target clear];
         if (onComplete) {
             onComplete(self);
         }
@@ -578,7 +577,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 -(void)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority complete:(void (^)(NSLoader *target))complete{
     [self setTmpOnComplete:complete];
-    [[self tmpConnection] cancel];
+    [self.tmpConnection cancel];
     [self setTmpConnection:nil];
     [self setTmpData:nil];
     [self setTmpURL:url];
@@ -592,7 +591,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
             hasCache=YES;
         }
         //
-        if ([[UIDevice currentDevice] network]==NetworkNone || (hasCache && NSLoaderCachePolicyLocalData==priority)) {
+        if (UIDeviceNetworkNone==[[UIDevice currentDevice] network] || (hasCache && NSLoaderCachePolicyLocalData==priority)) {
             if (hasCache) {
                 [self setTmpData:[NSMutableData dataWithContentsOfFile:filePath]];
             }
