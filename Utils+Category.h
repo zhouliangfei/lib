@@ -1,6 +1,6 @@
 //
 //  NSObject+Category.h
-//  Board2D
+//  lib
 //
 //  Created by mac on 14-5-4.
 //  Copyright (c) 2014年 383541328@qq.com. All rights reserved.
@@ -56,22 +56,22 @@ UIColor* UIColorFromString(NSString *string);
 @end
 
 //UIDevice****************************************
-typedef NS_ENUM(NSInteger, NetworkStatus) {
-    NetworkNone,
-    NetworkWiFi,
-    NetworkWWAN
+typedef NS_ENUM(NSInteger, UIDeviceNetwork) {
+    UIDeviceNetworkNone,
+    UIDeviceNetworkWiFi,
+    UIDeviceNetworkWWAN
 };
-typedef NS_ENUM(NSInteger, ScreenType) {
-    ScreenNULL,
-    ScreenIpad,
-    ScreenIphone,
-    ScreenIphone5
+typedef NS_ENUM(NSInteger, UIDeviceIdiom) {
+    UIDeviceIdiomNULL,
+    UIDeviceIdiomIpad,
+    UIDeviceIdiomIphone,
+    UIDeviceIdiomIphone5
 };
 
 UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIDevice(Utils_Category)
-@property(nonatomic,readonly) NetworkStatus network;
-@property(nonatomic,readonly) ScreenType screen;
+@property(nonatomic,readonly) UIDeviceNetwork network;
+@property(nonatomic,readonly) UIDeviceIdiom idiom;
 @end
 
 //UIImage****************************************
@@ -134,14 +134,12 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @end
 
 //UIViewController****************************************
-enum{
+typedef NS_ENUM(NSInteger, UITransitionStyle) {
     UITransitionStyleNULL,
     UITransitionStyleDissolve,
     UITransitionStyleCoverVertical,
     UITransitionStyleCoverHorizontal
 };
-typedef NSInteger UITransitionStyle;
-
 @interface UIViewController (Utils_Category)
 @property(nonatomic,assign) UITransitionStyle transitionStyle;
 @end
