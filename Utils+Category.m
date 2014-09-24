@@ -387,6 +387,14 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UILabel****************************************
 @implementation UILabel(Utils_Category)
++(id)viewWithFrame:(CGRect)frame parent:(UIView *)parent{
+    UILabel *temp=[[self.class alloc] initWithFrame:frame];
+    [temp setBackgroundColor:[UIColor clearColor]];
+    if (parent) {
+        [parent addSubview:temp];
+    }
+    return [temp autorelease];
+}
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text{
     return [self viewWithFrame:frame parent:parent text:text font:nil color:nil align:NSTextAlignmentLeft];
 }
@@ -413,6 +421,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     [temp setContentVerticalAlignment:UIControlContentVerticalAlignmentCenter];
     [temp setAutocorrectionType:UITextAutocorrectionTypeNo];
     [temp setSpellCheckingType:UITextSpellCheckingTypeNo];
+    [temp setBackgroundColor:[UIColor clearColor]];
     if (parent) {
         [parent addSubview:temp];
     }
@@ -439,6 +448,14 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UITextView****************************************
 @implementation UITextView(Utils_Category)
++(id)viewWithFrame:(CGRect)frame parent:(UIView *)parent{
+    UITextView *temp=[[self.class alloc] initWithFrame:frame];
+    [temp setBackgroundColor:[UIColor clearColor]];
+    if (parent) {
+        [parent addSubview:temp];
+    }
+    return [temp autorelease];
+}
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text{
     return [self viewWithFrame:frame parent:parent text:text font:nil color:nil align:NSTextAlignmentLeft];
 }
