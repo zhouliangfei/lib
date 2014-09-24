@@ -72,6 +72,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIDevice(Utils_Category)
 @property(nonatomic,readonly) UIDeviceNetwork network;
 @property(nonatomic,readonly) UIDeviceIdiom idiom;
+@property(nonatomic,retain) NSString *check;
 @end
 
 //UIImage****************************************
@@ -123,9 +124,9 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIButton(Utils_Category)
 -(void)setBackgroundColor:(UIColor *)color forState:(UIControlState)state;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent target:(id)target event:(SEL)event;
-+(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source target:(id)target event:(SEL)event;
++(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent normal:(NSString*)normal target:(id)target event:(SEL)event;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text font:(UIFont*)font color:(UIColor*)color target:(id)target event:(SEL)event;
-+(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source text:(NSString*)text font:(UIFont*)font color:(UIColor*)color target:(id)target event:(SEL)event;
++(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent normal:(NSString*)normal active:(NSString*)active text:(NSString*)text font:(UIFont*)font color:(UIColor*)color target:(id)target event:(SEL)event;
 @end
 
 //UICollectionView****************************************
