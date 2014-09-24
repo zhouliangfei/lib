@@ -222,7 +222,6 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 -(void)setCheck:(NSString *)check{
     objc_setAssociatedObject(self, OBJC_UIDEVICE_CHECK, check, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [NSObject cancelPreviousPerformRequestsWithTarget:self];
 }
 -(NSString *)check{
     return objc_getAssociatedObject(self, OBJC_UIDEVICE_CHECK);
