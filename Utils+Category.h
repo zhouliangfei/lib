@@ -159,7 +159,6 @@ typedef NSInteger NSLoaderCachePolicy;
 @property(nonatomic,readonly) NSURLConnection *connection;
 @property(nonatomic,readonly) NSData *data;
 @property(nonatomic,readonly) NSURL *URL;
--(void)clear;
 @end
 
 //***************************************************************************************************
@@ -168,6 +167,7 @@ typedef NSInteger NSLoaderCachePolicy;
 +(NSString*)pathForDocument:(NSString*)path;
 +(NSString*)pathForResource:(NSString*)path;
 +(NSString*)pathForTemporary:(NSString*)path;
++(NSString*)hashPath:(NSString*)path;
 //顶层
 +(id)uuid;
 +(id)iosVersion;
