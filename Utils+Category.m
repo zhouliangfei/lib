@@ -246,6 +246,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         SCNetworkReachabilityRef checkReachability=SCNetworkReachabilityCreateWithName(NULL, [self.check UTF8String]);
         if(NULL==checkReachability){
             network=UIDeviceNetworkNone;
+            [[NSNotificationCenter defaultCenter] postNotificationName:UIDeviceNetWorkDidChangeNotification object:self];
         }else{
             CFRelease(checkReachability);
         }
@@ -374,12 +375,13 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         objc_setAssociatedObject(self, loaderKey, loader, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [loader release];
     }
-    //
     [self setImage:nil];
+    //
+    __block UIImageView *blockSelf=self;
     [loader request:URL post:nil priority:NSLoaderCachePolicyLocalData complete:^(NSLoader *target) {
-        [self setImage:[UIImage imageWithData:target.data]];
+        [blockSelf setImage:[UIImage imageWithData:target.data]];
         if (onComplete) {
-            onComplete(self);
+            onComplete(blockSelf);
         }
     }];
 }
@@ -576,18 +578,18 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 @end
 
 //***************************************************************************************************
-@interface NSLoader(){
-    BOOL hasCache;
+@interface NSLoader()<NSStreamDelegate>{
     BOOL isFinish;
+    NSOutputStream *fileStream;
     NSLoaderCachePolicy tmpPriority;
 }
 @property(nonatomic,copy) void (^tmpOnComplete)(NSLoader *target);
 @property(nonatomic,retain) NSURLConnection *tmpConnection;
-@property(nonatomic,retain) NSMutableData *tmpData;
+@property(nonatomic,retain) NSURL *tmpURL;
 @end
 //
 @implementation NSLoader
-@synthesize tmpOnComplete,tmpConnection,tmpData;
+@synthesize tmpOnComplete,tmpConnection,tmpURL;
 @dynamic connection,data,URL;
 +(id)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority complete:(void (^)(NSLoader *target))complete{
     NSLoader *temp = [[NSLoader alloc] init];
@@ -597,83 +599,76 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 -(void)dealloc{
     [tmpOnComplete release];
     [tmpConnection release];
-    [tmpData release];
+    [self closeStream];
+    [tmpURL release];
     [super dealloc];
-}
--(void)clear{
-    [self setTmpData:nil];
 }
 -(void)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority complete:(void (^)(NSLoader *target))complete{
     [self setTmpOnComplete:complete];
     [self.tmpConnection cancel];
     [self setTmpConnection:nil];
-    [self setTmpData:nil];
+    [self setTmpURL:url];
+    [self closeStream];
     tmpPriority=priority;
-    hasCache=NO;
     isFinish=NO;
     //
     if (url) {
-        NSString *filePath=[Utils pathForDocument:MD5(url.absoluteString)];
+        BOOL hasCache=NO;
+        NSString *filePath=[Utils pathForDocument:[Utils hashPath:self.URL.absoluteString]];
         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
             hasCache=YES;
         }
-        //
-        if (UIDeviceNetworkNone==[[UIDevice currentDevice] network] || (hasCache && NSLoaderCachePolicyLocalData==priority)) {
-            if (hasCache) {
-                [self setTmpData:[NSMutableData dataWithContentsOfFile:filePath]];
-            }
+        if ((hasCache && NSLoaderCachePolicyLocalData==priority) || UIDeviceNetworkNone==[[UIDevice currentDevice] network]) {
             if (tmpOnComplete) {
                 tmpOnComplete(self);
             }
         }else{
-            if (url) {
-                NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:url];
-                if (post) {
-                    if ([post isKindOfClass:[NSDictionary class]]) {
-                        //post数据
-                        NSString *boundary = @"64F4845541AEA084";
-                        NSMutableData *body = [NSMutableData data];
-                        for(NSString *key in [post allKeys]){
-                            id value = [post objectForKey:key];
-                            if (value) {
-                                if([value isKindOfClass:[NSData class]]){
-                                    NSString *temp = [NSString stringWithFormat:@"\r\n--%@\r\nContent-Disposition: attachment; name=\"%@\"; filename=\"%@\"\r\nContent-Type: application/octet-stream\r\n\r\n", boundary, key, key];
-                                    [body appendData:[temp dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES]];
-                                    [body appendData:[NSData dataWithData:value]];
-                                }else{
-                                    NSString *temp = [NSString stringWithFormat:@"\r\n--%@\r\nContent-Disposition: form-data; name=\"%@\"\r\n\r\n%@", boundary, key, value];
-                                    [body appendData:[temp dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES]];
-                                }
+            NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:url];
+            if (post) {
+                if ([post isKindOfClass:[NSDictionary class]]) {
+                    //post数据
+                    NSString *boundary = @"64F4845541AEA084";
+                    NSMutableData *body = [NSMutableData data];
+                    for(NSString *key in [post allKeys]){
+                        id value = [post objectForKey:key];
+                        if (value) {
+                            if([value isKindOfClass:[NSData class]]){
+                                NSString *temp = [NSString stringWithFormat:@"\r\n--%@\r\nContent-Disposition: attachment; name=\"%@\"; filename=\"%@\"\r\nContent-Type: application/octet-stream\r\n\r\n", boundary, key, key];
+                                [body appendData:[temp dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES]];
+                                [body appendData:[NSData dataWithData:value]];
+                            }else{
+                                NSString *temp = [NSString stringWithFormat:@"\r\n--%@\r\nContent-Disposition: form-data; name=\"%@\"\r\n\r\n%@", boundary, key, value];
+                                [body appendData:[temp dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES]];
                             }
                         }
-                        NSString *temp = [NSString stringWithFormat:@"\r\n--%@--",boundary];
-                        [body appendData:[temp dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES]];
-                        //
-                        [request addValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
-                        [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)[body length]] forHTTPHeaderField:@"Content-Length"];
-                        [request setHTTPBody:body];
                     }
-                    if ([post isKindOfClass:[NSString class]]) {
-                        NSData *body=[post dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
-                        //
-                        [request setValue:[NSString stringWithFormat:@"application/x-www-form-urlencoded;"] forHTTPHeaderField:@"Content-Type"];
-                        [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)[body length]] forHTTPHeaderField:@"Content-Length"];
-                        [request setHTTPBody:body];
-                    }
-                    if ([post isKindOfClass:[NSData class]]) {
-                        [request setValue:[NSString stringWithFormat:@"application/octet-stream;"] forHTTPHeaderField:@"Content-Type"];
-                        [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)[post length]] forHTTPHeaderField:@"Content-Length"];
-                        [request setHTTPBody:post];
-                    }
-                    [request setHTTPMethod:@"POST"];
+                    NSString *temp = [NSString stringWithFormat:@"\r\n--%@--",boundary];
+                    [body appendData:[temp dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES]];
+                    //
+                    [request addValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
+                    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)[body length]] forHTTPHeaderField:@"Content-Length"];
+                    [request setHTTPBody:body];
                 }
-                [self setTmpConnection:[NSURLConnection connectionWithRequest:request delegate:self]];
-                //同步方式
-                if (nil==tmpOnComplete) {
-                    do{
-                        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]];
-                    }while(!isFinish);
+                if ([post isKindOfClass:[NSString class]]) {
+                    NSData *body=[post dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
+                    //
+                    [request setValue:[NSString stringWithFormat:@"application/x-www-form-urlencoded;"] forHTTPHeaderField:@"Content-Type"];
+                    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)[body length]] forHTTPHeaderField:@"Content-Length"];
+                    [request setHTTPBody:body];
                 }
+                if ([post isKindOfClass:[NSData class]]) {
+                    [request setValue:[NSString stringWithFormat:@"application/octet-stream;"] forHTTPHeaderField:@"Content-Type"];
+                    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)[post length]] forHTTPHeaderField:@"Content-Length"];
+                    [request setHTTPBody:post];
+                }
+                [request setHTTPMethod:@"POST"];
+            }
+            [self setTmpConnection:[NSURLConnection connectionWithRequest:request delegate:self]];
+            if (nil==tmpOnComplete) {
+                //模拟同步
+                do{
+                    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]];
+                }while(!isFinish);
             }
         }
     }
@@ -682,46 +677,79 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     return tmpConnection;
 }
 -(NSData*)data{
-    return tmpData;
+    //取文件
+    NSString *filePath=[Utils pathForDocument:[Utils hashPath:self.URL.absoluteString]];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+        return [NSMutableData dataWithContentsOfFile:filePath];
+    }
+    //临时文件
+    NSString *tempPath=[Utils pathForTemporary:[Utils hashPath:self.URL.absoluteString]];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
+        return [NSMutableData dataWithContentsOfFile:tempPath];
+    }
+    return nil;
 }
 -(NSURL*)URL{
-    return tmpConnection.currentRequest.URL;
+    return tmpURL;
 }
-//代理
+//
+-(void)openStream:(NSString*)filePath{
+    [self closeStream];
+    if (nil==fileStream) {
+        fileStream=[[NSOutputStream alloc] initToFileAtPath:filePath append:NO];
+        [fileStream open];
+    }
+}
+-(void)closeStream{
+    if (fileStream) {
+        [fileStream close];
+        [fileStream release],fileStream=nil;
+    }
+}
+//
 -(NSCachedURLResponse *)connection:(NSURLConnection *)connection willCacheResponse:(NSCachedURLResponse *)cachedResponse{
     return nil;
 }
 -(void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error{
     if ([self connection]==connection) {
-        if (hasCache) {
-            NSString *filePath=[Utils pathForDocument:MD5(connection.currentRequest.URL.absoluteString)];
-            [self setTmpData:[NSMutableData dataWithContentsOfFile:filePath]];
-        }else{
-            [self setTmpData:nil];
-        }
+        [self closeStream];
         isFinish=YES;
     }
 }
 -(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)aResponse{
     if ([self connection]==connection) {
-        [self setTmpData:[NSMutableData data]];
+        [self openStream:[Utils pathForTemporary:[Utils hashPath:self.URL.absoluteString]]];
         isFinish=NO;
     }
 }
 -(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data{
-    if ([self connection]==connection) {
-        [tmpData appendData:data];
+    if ([self connection]==connection && fileStream) {
+        const uint8_t *dataBytes=[data bytes];
+        NSInteger dataLength=[data length];
+        NSInteger bytesWrittenSoFar=0;
+        NSInteger bytesWritten=0;
+        do {
+            bytesWritten = [fileStream write:&dataBytes[bytesWrittenSoFar] maxLength:dataLength - bytesWrittenSoFar];
+            assert(bytesWritten != 0);
+            if (bytesWritten == -1) {
+                break;
+            } else {
+                bytesWrittenSoFar += bytesWritten;
+            }
+        } while (bytesWrittenSoFar != dataLength);
     }
 }
 -(void)connectionDidFinishLoading:(NSURLConnection *)connection{
     if ([self connection]==connection) {
-        if (NSLoaderCachePolicyNULL != tmpPriority) {
-            NSString *filePath=[Utils pathForDocument:MD5(self.URL.absoluteString)];
-            [tmpData writeToFile:filePath atomically:YES];
+        if (NSLoaderCachePolicyNULL!=tmpPriority) {
+            NSString *filePath=[Utils pathForDocument:[Utils hashPath:self.URL.absoluteString]];
+            NSString *tempPath=[Utils pathForTemporary:[Utils hashPath:self.URL.absoluteString]];
+            [[NSFileManager defaultManager] moveItemAtPath:tempPath toPath:filePath error:nil];
         }
         if (tmpOnComplete) {
             tmpOnComplete(self);
         }
+        [self closeStream];
         isFinish=YES;
     }
 }
@@ -738,6 +766,9 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 +(NSString*)pathForTemporary:(NSString*)path{
     return [NSTemporaryDirectory() stringByAppendingPathComponent:path];
+}
++(NSString*)hashPath:(NSString*)path{
+    return [MD5([path stringByDeletingPathExtension]) stringByAppendingPathExtension:[path pathExtension]];
 }
 //跳转
 +(id)gotoWithName:(NSString*)name animated:(UITransitionStyle)animated{
@@ -907,3 +938,4 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     }
 }
 @end
+
