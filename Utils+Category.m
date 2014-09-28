@@ -497,6 +497,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         [temp addTarget:target action:event forControlEvents:UIControlEventTouchUpInside];
     }
     if (active) {
+        [temp setImage:[UIImage imageWithResource:active] forState:UIControlStateHighlighted];
         [temp setImage:[UIImage imageWithResource:active] forState:UIControlStateSelected];
     }
     if (normal) {
@@ -854,21 +855,25 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     return instance;
 }
 //
++(UIWindow*)keyWindow{
+    static UIWindow *keyWindow=nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        keyWindow=[[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+        [keyWindow setBackgroundColor:[UIColor blackColor]];
+        [keyWindow makeKeyAndVisible];
+        NSLog(@"%@",NSDocuments());
+    });
+    return keyWindow;
+}
 +(UINavigationController*)rootViewController{
-    UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
-    if (keyWindow) {
-        if (nil==[keyWindow rootViewController]) {
-            UINavigationController *rootViewController=[[UINavigationController alloc] init];
-            [keyWindow setRootViewController:rootViewController];
-            [rootViewController setNavigationBarHidden:YES];
-            [rootViewController release];
-            NSLog(@"%@",NSDocuments());
-        }
-        return (UINavigationController*)[keyWindow rootViewController];
-    }else{
-        @throw [NSException exceptionWithName:NSObjectNotAvailableException reason:@"applications must have a key window!" userInfo:nil];
+    if (nil==[[Utils keyWindow] rootViewController]) {
+        UINavigationController *rootViewController = [[UINavigationController alloc] init];
+        [[Utils keyWindow] setRootViewController:rootViewController];
+        [rootViewController setNavigationBarHidden:YES];
+        [rootViewController release];
     }
-    return nil;
+    return (UINavigationController*)[[Utils keyWindow] rootViewController];
 }
 +(UIViewController*)pushViewController:(UIViewController*)viewController animated:(UITransitionStyle)animated{
     switch (animated) {
@@ -908,13 +913,12 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 +(void)transitionFrom:(NSString*)transition{
     UIViewController *rootController = [Utils rootViewController];
     if (rootController) {
-        NSArray *orientation = [NSArray arrayWithObjects:kCATransitionFromTop,kCATransitionFromRight,kCATransitionFromBottom,kCATransitionFromLeft, nil];
-        UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
-        NSUInteger index = [orientation indexOfObject:transition];
+        NSArray *orientation=[NSArray arrayWithObjects:kCATransitionFromTop,kCATransitionFromRight,kCATransitionFromBottom,kCATransitionFromLeft, nil];
+        NSUInteger index=[orientation indexOfObject:transition];
         if (index==NSNotFound) {
             CATransition *animation = [CATransition animation];
             [animation setType:transition];
-            [keyWindow.layer addAnimation:animation forKey:nil];
+            [[Utils keyWindow].layer addAnimation:animation forKey:nil];
         }else{
             switch ([rootController interfaceOrientation]){
                 case UIInterfaceOrientationLandscapeLeft:
@@ -933,7 +937,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
             CATransition *animation = [CATransition animation];
             [animation setSubtype:transitionSubType];
             [animation setType:kCATransitionPush];
-            [keyWindow.layer addAnimation:animation forKey:nil];
+            [[Utils keyWindow].layer addAnimation:animation forKey:nil];
         }
     }
 }
