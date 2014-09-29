@@ -757,6 +757,21 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 @end
 
 //***************************************************************************************************
+@interface UIRootController : UINavigationController
+@end
+@implementation UIRootController
+-(BOOL)shouldAutorotate{
+    return [self.topViewController shouldAutorotate];
+}
+-(NSUInteger)supportedInterfaceOrientations{
+    return [self.topViewController supportedInterfaceOrientations];
+}
+-(BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation{
+    return [self.topViewController shouldAutorotateToInterfaceOrientation:interfaceOrientation];
+}
+@end
+//
+//
 @implementation Utils
 //路径
 +(NSString*)pathForDocument:(NSString*)path{
@@ -773,7 +788,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 //跳转
 +(id)gotoWithName:(NSString*)name animated:(UITransitionStyle)animated{
-    NSArray *viewControllers = [[Utils rootViewController] viewControllers];
+    NSArray *viewControllers = [[Utils rootController] viewControllers];
     for (UIViewController *viewController in viewControllers) {
         if ([name isEqualToString:NSStringFromClass(viewController.class)]) {
             return [Utils popViewController:viewController animated:animated];
@@ -781,13 +796,13 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     }
     Class class = NSClassFromString(name);
     if (class) {
-        UIViewController *viewController = [[[class alloc] initWithNibName:nil bundle:nil] autorelease];
+        UIViewController *viewController=[[[class alloc] initWithNibName:nil bundle:nil] autorelease];
         return [Utils pushViewController:viewController animated:animated];
     }
     return nil;
 }
 +(id)back{
-    NSArray *viewControllers = [[Utils rootViewController] viewControllers];
+    NSArray *viewControllers = [[Utils rootController] viewControllers];
     if (viewControllers.count > 1) {
         UIViewController *preController = [viewControllers objectAtIndex:viewControllers.count-2];
         UIViewController *viewController = [viewControllers objectAtIndex:viewControllers.count-1];
@@ -798,7 +813,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 +(id)openWithName:(NSString*)name{
     Class class = NSClassFromString(name);
     if (class) {
-        UIViewController *parentController = [[Utils rootViewController] visibleViewController];
+        UIViewController *parentController = [[Utils rootController] visibleViewController];
         if (parentController) {
             UIViewController *viewController = [[[class alloc] initWithNibName:nil bundle:nil] autorelease];
             [parentController addChildViewController:viewController];
@@ -809,7 +824,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     return nil;
 }
 +(id)close{
-    UIViewController *parentController = [[Utils rootViewController] visibleViewController];
+    UIViewController *parentController = [[Utils rootController] visibleViewController];
     if (parentController) {
         UIViewController *viewController = [[parentController childViewControllers] lastObject];
         if (viewController) {
@@ -866,9 +881,9 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     });
     return keyWindow;
 }
-+(UINavigationController*)rootViewController{
++(UINavigationController*)rootController{
     if (nil==[[Utils keyWindow] rootViewController]) {
-        UINavigationController *rootViewController = [[UINavigationController alloc] init];
+        UIRootController *rootViewController = [[UIRootController alloc] init];
         [[Utils keyWindow] setRootViewController:rootViewController];
         [rootViewController setNavigationBarHidden:YES];
         [rootViewController release];
@@ -889,7 +904,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         default:
             break;
     }
-    [[Utils rootViewController] pushViewController:viewController animated:NO];
+    [[Utils rootController] pushViewController:viewController animated:NO];
     [viewController setTransitionStyle:animated];
     return viewController;
 }
@@ -907,11 +922,11 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         default:
             break;
     }
-    [[Utils rootViewController] popToViewController:viewController animated:NO];
+    [[Utils rootController] popToViewController:viewController animated:NO];
     return viewController;
 }
 +(void)transitionFrom:(NSString*)transition{
-    UIViewController *rootController = [Utils rootViewController];
+    UIViewController *rootController = [Utils rootController];
     if (rootController) {
         NSArray *orientation=[NSArray arrayWithObjects:kCATransitionFromTop,kCATransitionFromRight,kCATransitionFromBottom,kCATransitionFromLeft, nil];
         NSUInteger index=[orientation indexOfObject:transition];
@@ -942,4 +957,5 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     }
 }
 @end
+
 
