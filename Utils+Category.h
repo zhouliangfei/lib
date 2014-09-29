@@ -178,7 +178,7 @@ typedef NSInteger NSLoaderCachePolicy;
 +(void)setParameter:(id)parameter;
 //跳转
 +(UIWindow*)keyWindow;
-+(UINavigationController*)rootViewController;
++(UINavigationController*)rootController;
 +(id)gotoWithName:(NSString*)name animated:(UITransitionStyle)animated;
 +(id)back;
 +(id)openWithName:(NSString*)name;
