@@ -97,7 +97,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 //UIImageView****************************************
 @interface UIImageView(Utils_Category)
 @property(nonatomic,retain) NSURL *URL;
--(void)setURL:(NSURL*)URL onComplete:(void (^)(id target))onComplete;
+-(void)setURL:(NSURL*)URL preview:(UIImage*)preview onComplete:(void (^)(id target))onComplete;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent document:(NSString*)document;
 @end
@@ -154,9 +154,11 @@ enum{
 typedef NSInteger NSLoaderCachePolicy;
 
 @interface NSLoader : NSObject
-+(id)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority complete:(void (^)(NSLoader *target))complete;
--(void)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority complete:(void (^)(NSLoader *target))complete;
++(id)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
+-(void)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
 @property(nonatomic,readonly) NSURLConnection *connection;
+@property(nonatomic,readonly) unsigned long long bytesLoaded;
+@property(nonatomic,readonly) unsigned long long bytesTotal;
 @property(nonatomic,readonly) NSData *data;
 @property(nonatomic,readonly) NSURL *URL;
 @end
