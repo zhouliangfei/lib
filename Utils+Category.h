@@ -156,9 +156,9 @@ typedef NSInteger NSLoaderCachePolicy;
 @interface NSLoader : NSObject
 +(id)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
 -(void)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
-@property(nonatomic,readonly) NSURLConnection *connection;
 @property(nonatomic,readonly) unsigned long long bytesLoaded;
 @property(nonatomic,readonly) unsigned long long bytesTotal;
+@property(nonatomic,readonly) NSURLConnection *connection;
 @property(nonatomic,readonly) NSData *data;
 @property(nonatomic,readonly) NSURL *URL;
 @end
