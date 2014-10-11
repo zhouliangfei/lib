@@ -366,24 +366,26 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     return objc_getAssociatedObject(self, OBJC_UIIMAGEVIEW_URL);
 }
 -(void)setURL:(NSURL*)URL preview:(UIImage*)preview onComplete:(void (^)(id target))onComplete{
-    objc_setAssociatedObject(self, OBJC_UIIMAGEVIEW_URL, URL, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [self performSelectorOnMainThread:@selector(setImage:) withObject:preview waitUntilDone:YES];
-    //
-    const void *loaderKey="imageLoaderKey";
-    NSLoader *loader = objc_getAssociatedObject(self, loaderKey);
-    if (nil==loader) {
-        loader=[[NSLoader alloc] init];
-        objc_setAssociatedObject(self, loaderKey, loader, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [loader release];
-    }
-    //
-    __block UIImageView *blockSelf=self;
-    [loader request:URL post:nil priority:NSLoaderCachePolicyLocalData progress:nil complete:^(NSLoader *target) {
-        [blockSelf performSelectorOnMainThread:@selector(setImage:) withObject:[UIImage imageWithData:target.data] waitUntilDone:NO];
-        if (onComplete) {
-            onComplete(blockSelf);
+    if (NO==[URL isEqual:self.URL]) {
+        objc_setAssociatedObject(self, OBJC_UIIMAGEVIEW_URL, URL, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [self performSelectorOnMainThread:@selector(setImage:) withObject:preview waitUntilDone:YES];
+        //
+        const void *loaderKey="imageLoaderKey";
+        NSLoader *loader = objc_getAssociatedObject(self, loaderKey);
+        if (nil==loader) {
+            loader=[[NSLoader alloc] init];
+            objc_setAssociatedObject(self, loaderKey, loader, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            [loader release];
         }
-    }];
+        //
+        __block UIImageView *blockSelf=self;
+        [loader request:URL post:nil priority:NSLoaderCachePolicyLocalData progress:nil complete:^(NSLoader *target) {
+            [blockSelf performSelectorOnMainThread:@selector(setImage:) withObject:[UIImage imageWithData:target.data] waitUntilDone:NO];
+            if (onComplete) {
+                onComplete(blockSelf);
+            }
+        }];
+    }
 }
 @end
 
