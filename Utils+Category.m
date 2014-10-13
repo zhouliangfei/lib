@@ -828,7 +828,11 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     return [NSTemporaryDirectory() stringByAppendingPathComponent:path];
 }
 +(NSString*)hashPath:(NSString*)path{
-    return [MD5([path stringByDeletingPathExtension]) stringByAppendingPathExtension:[path pathExtension]];
+    NSString *extension=[path pathExtension];
+    if ([extension isEqualToString:@""]) {
+        return MD5(path);
+    }
+    return [MD5(path) stringByAppendingPathExtension:extension];
 }
 //跳转
 +(id)gotoWithName:(NSString*)name animated:(UITransitionStyle)animated{
