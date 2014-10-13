@@ -244,12 +244,19 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 -(UIDeviceNetwork)network{
     if (network!=UIDeviceNetworkNone && self.check) {
         SCNetworkReachabilityRef checkReachability=SCNetworkReachabilityCreateWithName(NULL, [self.check UTF8String]);
-        if(NULL==checkReachability){
-            network=UIDeviceNetworkNone;
-            [[NSNotificationCenter defaultCenter] postNotificationName:UIDeviceNetWorkDidChangeNotification object:self];
-        }else{
-            CFRelease(checkReachability);
+        if(checkReachability){
+            SCNetworkReachabilityFlags flags;
+            BOOL didRetrieveFlags=SCNetworkReachabilityGetFlags(checkReachability, &flags);
+            if (didRetrieveFlags) {
+                BOOL isReachable=flags & kSCNetworkFlagsReachable;
+                BOOL needsConnection=flags & kSCNetworkFlagsConnectionRequired;
+                if (isReachable && !needsConnection) {
+                    return network;
+                }
+            }
         }
+        network=UIDeviceNetworkNone;
+        [[NSNotificationCenter defaultCenter] postNotificationName:UIDeviceNetWorkDidChangeNotification object:self];
     }
     return network;
 }
