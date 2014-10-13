@@ -247,6 +247,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         if(checkReachability){
             SCNetworkReachabilityFlags flags;
             BOOL didRetrieveFlags=SCNetworkReachabilityGetFlags(checkReachability, &flags);
+            CFRelease(checkReachability);
             if (didRetrieveFlags) {
                 BOOL isReachable=flags & kSCNetworkFlagsReachable;
                 BOOL needsConnection=flags & kSCNetworkFlagsConnectionRequired;
