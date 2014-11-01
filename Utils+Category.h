@@ -98,6 +98,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIImageView(Utils_Category)
 @property(nonatomic,retain) NSURL *URL;
 -(void)setURL:(NSURL*)URL preview:(UIImage*)preview onComplete:(void (^)(id target))onComplete;
++(id)viewWithSource:(NSString*)source;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent document:(NSString*)document;
 @end
@@ -125,6 +126,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 -(void)setBackgroundColor:(UIColor *)color forState:(UIControlState)state;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent target:(id)target event:(SEL)event;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent normal:(NSString*)normal target:(id)target event:(SEL)event;
++(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent normal:(NSString*)normal active:(NSString*)active target:(id)target event:(SEL)event;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text font:(UIFont*)font color:(UIColor*)color target:(id)target event:(SEL)event;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent normal:(NSString*)normal active:(NSString*)active text:(NSString*)text font:(UIFont*)font color:(UIColor*)color target:(id)target event:(SEL)event;
 @end
@@ -154,13 +156,15 @@ enum{
 typedef NSInteger NSLoaderCachePolicy;
 
 @interface NSLoader : NSObject
-+(id)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
--(void)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
++(id)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
+-(void)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
 @property(nonatomic,readonly) unsigned long long bytesLoaded;
 @property(nonatomic,readonly) unsigned long long bytesTotal;
 @property(nonatomic,readonly) NSURLConnection *connection;
+@property(nonatomic,readonly) NSError *error;
 @property(nonatomic,readonly) NSData *data;
 @property(nonatomic,readonly) NSURL *URL;
+-(void)cancel;
 @end
 
 //***************************************************************************************************
