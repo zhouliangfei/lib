@@ -184,12 +184,11 @@ UIColor* UIColorFromString(NSString *string){
     return [UIColor colorWithRed:rc/255.0 green:gc/255.0 blue:bc/255.0 alpha:1.0];
 }
 -(id)image{
-    CGRect rect = CGRectMake(0.0, 0.0, 1.0, 1.0);
+    CGRect rect=CGRectMake(0.0, 0.0, 1.0, 1.0);
     UIGraphicsBeginImageContext(rect.size);
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    CGContextSetFillColorWithColor(context, self.CGColor);
-    CGContextFillRect(context, rect);
-    UIImage *colorImg = UIGraphicsGetImageFromCurrentImageContext();
+    CGContextSetFillColorWithColor(UIGraphicsGetCurrentContext(), self.CGColor);
+    CGContextFillRect(UIGraphicsGetCurrentContext(), rect);
+    UIImage *colorImg=UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
     return colorImg;
 }
@@ -245,16 +244,15 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     if (network!=UIDeviceNetworkNone && self.check) {
         SCNetworkReachabilityRef checkReachability=SCNetworkReachabilityCreateWithName(NULL, [self.check UTF8String]);
         if(checkReachability){
-            SCNetworkReachabilityFlags flags;
+            CFRelease(checkReachability);
+            return network;
+            /*
+            SCNetworkReachabilityFlags flags=0;
             BOOL didRetrieveFlags=SCNetworkReachabilityGetFlags(checkReachability, &flags);
             CFRelease(checkReachability);
-            if (didRetrieveFlags) {
-                BOOL isReachable=flags & kSCNetworkFlagsReachable;
-                BOOL needsConnection=flags & kSCNetworkFlagsConnectionRequired;
-                if (isReachable && !needsConnection) {
-                    return network;
-                }
-            }
+            if (didRetrieveFlags && flags!=0) {
+                return network;
+            }*/
         }
         network=UIDeviceNetworkNone;
         [[NSNotificationCenter defaultCenter] postNotificationName:UIDeviceNetWorkDidChangeNotification object:self];
@@ -264,8 +262,8 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 -(void)netWorkDidChange{
     UIDeviceNetwork temp=UIDeviceNetworkNone;
     SCNetworkReachabilityFlags flags=0;
-    SCNetworkReachabilityGetFlags(reachability, &flags);
-    if(flags & kSCNetworkReachabilityFlagsReachable){
+    BOOL didRetrieveFlags=SCNetworkReachabilityGetFlags(reachability, &flags);
+    if(didRetrieveFlags && (flags & kSCNetworkReachabilityFlagsReachable)){
         if((flags & kSCNetworkReachabilityFlagsConnectionRequired) == 0) {
             temp=UIDeviceNetworkWiFi;
         }
@@ -341,6 +339,10 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     }
     return [temp autorelease];
 }
++(id)viewWithSource:(NSString*)source{
+    UIImageView *temp=[[self.class alloc] initWithImage:[UIImage imageWithResource:source]];
+    return [temp autorelease];
+}
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source{
     UIImageView *temp=[self.class viewWithFrame:frame parent:parent];
     [temp setImage:[UIImage imageWithResource:source]];
@@ -362,9 +364,19 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     });
 }
 -(void)__dealloc__{
+    [self.loader cancel];
     [self setImage:nil];
-    [self setHighlightedImage:nil];
     [self __dealloc__];
+}
+-(NSLoader*)loader{
+    const void *loaderKey="loader_key";
+    NSLoader *temp=objc_getAssociatedObject(self, loaderKey);
+    if (nil==temp) {
+        temp=[[NSLoader alloc] init];
+        objc_setAssociatedObject(self, loaderKey, temp, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [temp release];
+    }
+    return temp;
 }
 //从网络加载
 -(void)setURL:(NSURL*)URL{
@@ -374,26 +386,16 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     return objc_getAssociatedObject(self, OBJC_UIIMAGEVIEW_URL);
 }
 -(void)setURL:(NSURL*)URL preview:(UIImage*)preview onComplete:(void (^)(id target))onComplete{
-    if (NO==[URL isEqual:self.URL]) {
-        objc_setAssociatedObject(self, OBJC_UIIMAGEVIEW_URL, URL, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [self performSelectorOnMainThread:@selector(setImage:) withObject:preview waitUntilDone:YES];
-        //
-        const void *loaderKey="imageLoaderKey";
-        NSLoader *loader = objc_getAssociatedObject(self, loaderKey);
-        if (nil==loader) {
-            loader=[[NSLoader alloc] init];
-            objc_setAssociatedObject(self, loaderKey, loader, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            [loader release];
+    objc_setAssociatedObject(self, OBJC_UIIMAGEVIEW_URL, URL, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [self performSelectorOnMainThread:@selector(setImage:) withObject:preview waitUntilDone:YES];
+    //
+    __block UIImageView *blockSelf=self;
+    [self.loader request:URL post:nil cache:nil priority:NSLoaderCachePolicyLocalData progress:nil complete:^(NSLoader *target) {
+        [blockSelf performSelectorOnMainThread:@selector(setImage:) withObject:[UIImage imageWithData:target.data] waitUntilDone:YES];
+        if (onComplete) {
+            onComplete(blockSelf);
         }
-        //
-        __block UIImageView *blockSelf=self;
-        [loader request:URL post:nil priority:NSLoaderCachePolicyLocalData progress:nil complete:^(NSLoader *target) {
-            [blockSelf performSelectorOnMainThread:@selector(setImage:) withObject:[UIImage imageWithData:target.data] waitUntilDone:NO];
-            if (onComplete) {
-                onComplete(blockSelf);
-            }
-        }];
-    }
+    }];
 }
 @end
 
@@ -499,6 +501,9 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent normal:(NSString*)normal target:(id)target event:(SEL)event{
     return [self viewWithFrame:frame parent:parent normal:normal active:nil text:nil font:nil color:nil target:target event:event];
 }
++(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent normal:(NSString*)normal active:(NSString*)active target:(id)target event:(SEL)event{
+    return [self viewWithFrame:frame parent:parent normal:normal active:active text:nil font:nil color:nil target:target event:event];
+}
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text font:(UIFont*)font color:(UIColor*)color target:(id)target event:(SEL)event{
     return [self viewWithFrame:frame parent:parent normal:nil active:nil text:text font:font color:color target:target event:event];
 }
@@ -592,71 +597,62 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 //***************************************************************************************************
 @interface NSLoader()<NSStreamDelegate>{
     BOOL isFinish;
-    NSMutableData *tmpData;
     NSOutputStream *fileStream;
     NSLoaderCachePolicy tmpPriority;
 }
 @property(nonatomic,copy) void (^tmpOnProgress)(NSLoader *target);
 @property(nonatomic,copy) void (^tmpOnComplete)(NSLoader *target);
 @property(nonatomic,retain) NSURLConnection *tmpConnection;
+@property(nonatomic,retain) NSString *tmpCache;
+@property(nonatomic,retain) NSError *tmpError;
+@property(nonatomic,retain) NSData *tmpData;
 @property(nonatomic,retain) NSURL *tmpURL;
 @end
 //
 @implementation NSLoader
-@synthesize tmpOnProgress,tmpOnComplete,tmpConnection,tmpURL;
+@synthesize tmpOnProgress,tmpOnComplete,tmpConnection,tmpCache,tmpError,tmpData,tmpURL;
 @synthesize bytesLoaded,bytesTotal;
-@dynamic connection,data,URL;
-+(id)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete{
+@dynamic connection,error,data,URL;
++(id)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete{
     NSLoader *temp = [[NSLoader alloc] init];
-    [temp request:url post:post priority:priority progress:progress complete:complete];
+    [temp request:url post:post cache:cache priority:priority progress:progress complete:complete];
     return [temp autorelease];
 }
--(instancetype)init{
-    self=[super init];
-    if (self) {
-        tmpData=[[NSMutableData alloc] init];
-    }
-    return self;
-}
 -(void)dealloc{
-    [tmpConnection cancel];
-    [tmpConnection release];
-    [tmpOnProgress release];
-    [tmpOnComplete release];
-    [self closeStream];
-    [tmpData release];
-    [tmpURL release];
+    [self cancel];
     [super dealloc];
 }
--(void)request:(NSURL*)url post:(id)post priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete{
-    [self setTmpOnProgress:progress];
-    [self setTmpOnComplete:complete];
-    [self.tmpConnection cancel];
-    [self setTmpConnection:nil];
-    [tmpData setLength:0];
-    [self setTmpURL:url];
-    [self closeStream];
-    tmpPriority=priority;
-    bytesLoaded=0;
-    bytesTotal=0;
-    isFinish=NO;
-    //
+-(void)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete{
+    [self cancel];
     if (url) {
+        [self setTmpOnProgress:progress];
+        [self setTmpOnComplete:complete];
+        [self setTmpURL:url];
+        tmpPriority=priority;
+        isFinish=NO;
+        //
+        if (cache) {
+            [self setTmpCache:[Utils hashPath:cache]];
+        }else{
+            [self setTmpCache:[Utils hashPath:url.absoluteString]];
+        }
+        //
         BOOL hasCache=NO;
-        NSString *filePath=[Utils pathForDocument:[Utils hashPath:self.URL.absoluteString]];
+        NSString *filePath=[Utils pathForDocument:tmpCache];
         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
             bytesLoaded=[[[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil] fileSize];
             bytesTotal=bytesLoaded;
             hasCache=YES;
         }
         if ((hasCache && NSLoaderCachePolicyLocalData==priority) || UIDeviceNetworkNone==[[UIDevice currentDevice] network]) {
+            isFinish=YES;
             if (tmpOnComplete) {
                 tmpOnComplete(self);
             }
         }else{
             NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:url];
             //取已下载的数据大小
-            NSString *tempPath=[Utils pathForTemporary:[Utils hashPath:self.URL.absoluteString]];
+            NSString *tempPath=[Utils pathForTemporary:tmpCache];
             if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
                 bytesLoaded=[[[NSFileManager defaultManager] attributesOfItemAtPath:tempPath error:nil] fileSize];
                 [request addValue:[NSString stringWithFormat:@"bytes=%llu-", bytesLoaded] forHTTPHeaderField:@"Range"];
@@ -709,27 +705,52 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
                 }while(!isFinish);
             }
         }
+    }else{
+        if (tmpOnComplete) {
+            tmpOnComplete(self);
+        }
     }
 }
+//
 -(NSURLConnection*)connection{
     return tmpConnection;
 }
--(NSData*)data{
-    //取数据
-    if (tmpData.length>0) {
-        return tmpData;
-    }
-    //取文件
-    NSString *filePath=[Utils pathForDocument:[Utils hashPath:self.URL.absoluteString]];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
-        return [NSMutableData dataWithContentsOfFile:filePath];
-    }
-    return nil;
+-(NSError *)error{
+    return tmpError;
 }
 -(NSURL*)URL{
     return tmpURL;
 }
+-(NSData*)data{
+    if (nil==self.error) {
+        if (tmpData) {
+            return tmpData;
+        }else{
+            NSString *filePath=[Utils pathForDocument:tmpCache];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+                return [NSMutableData dataWithContentsOfFile:filePath];
+            }
+        }
+    }
+    return nil;
+}
 //
+-(void)cancel{
+    isFinish=YES;
+    bytesTotal=0;
+    bytesLoaded=0;
+    tmpPriority=NSLoaderCachePolicyNULL;
+    //
+    [tmpConnection cancel];
+    [self setTmpOnProgress:nil];
+    [self setTmpOnComplete:nil];
+    [self setTmpConnection:nil];
+    [self setTmpError:nil];
+    [self setTmpCache:nil];
+    [self setTmpData:nil];
+    [self setTmpURL:nil];
+    [self closeStream];
+}
 -(void)openStream:(NSString*)filePath{
     [self closeStream];
     if (nil==fileStream) {
@@ -750,8 +771,19 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 -(void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error{
     if ([self connection]==connection) {
+        //清除错误文件
+        NSString *tempPath=[Utils pathForTemporary:tmpCache];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
+            [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+        }
+        [self setTmpError:error];
+        [self setTmpData:nil];
         [self closeStream];
+        //完成
         isFinish=YES;
+        if (tmpOnComplete) {
+            tmpOnComplete(self);
+        }
     }
 }
 -(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response{
@@ -760,7 +792,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         if(httpResponse && [httpResponse respondsToSelector:@selector(allHeaderFields)]){
             bytesTotal=[[[httpResponse allHeaderFields] objectForKey:@"Content-Length"] longLongValue];
         }
-        [self openStream:[Utils pathForTemporary:[Utils hashPath:self.URL.absoluteString]]];
+        [self openStream:[Utils pathForTemporary:tmpCache]];
         isFinish=NO;
     }
 }
@@ -787,20 +819,20 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 -(void)connectionDidFinishLoading:(NSURLConnection *)connection{
     if ([self connection]==connection) {
-        NSString *tempPath=[Utils pathForTemporary:[Utils hashPath:self.URL.absoluteString]];
+        NSString *tempPath=[Utils pathForTemporary:tmpCache];
         if (NSLoaderCachePolicyNULL!=tmpPriority) {
-            NSString *filePath=[Utils pathForDocument:[Utils hashPath:self.URL.absoluteString]];
+            NSString *filePath=[Utils pathForDocument:tmpCache];
             if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                 [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
             }
             [[NSFileManager defaultManager] moveItemAtPath:tempPath toPath:filePath error:nil];
         }else{
-            [tmpData appendData:[NSData dataWithContentsOfFile:tempPath]];
+            [self setTmpData:[NSData dataWithContentsOfFile:tempPath]];
             [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
         }
         [self closeStream];
-        isFinish=YES;
         //完成
+        isFinish=YES;
         if (tmpOnComplete) {
             tmpOnComplete(self);
         }
