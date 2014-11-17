@@ -86,6 +86,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIView(Utils_Category)
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView *)parent background:(UIColor*)background;
+-(id)roundingCorners:(UIRectCorner)corners size:(CGFloat)size;
 -(id)convertImage;
 @end
 
@@ -134,6 +135,12 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 //UICollectionView****************************************
 @interface UICollectionView(Utils_Category)
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent layout:(UICollectionViewLayout*)layout;
+@end
+
+//UIActivityIndicatorView*************************
+@interface UIActivityIndicatorView(Utils_Category)
++(void)showAtView:(UIView*)view;
++(void)hidden;
 @end
 
 //UIViewController****************************************
