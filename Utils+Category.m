@@ -203,7 +203,7 @@ static UIDeviceNetwork network;
 static SCNetworkReachabilityRef reachability=NULL;
 static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void *info){
 	UIDevice *device = (UIDevice*)info;
-	[device netWorkDidChange];
+    [device netWorkDidChange:flags];
 }
 +(id)alloc{
     UIDevice *currentDevice=[UIDevice allocWithZone:NSDefaultMallocZone()];
@@ -214,13 +214,24 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
             SCNetworkReachabilityContext context={0, (void*)currentDevice, NULL, NULL, NULL};
             SCNetworkReachabilitySetCallback(reachability, detectNetworkCallback, &context);
             SCNetworkReachabilityScheduleWithRunLoop(reachability, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-            [currentDevice netWorkDidChange];
+            //抓取状态
+            SCNetworkReachabilityFlags flags=0;
+            BOOL retrieveFlags=SCNetworkReachabilityGetFlags(reachability, &flags);
+            if(retrieveFlags){
+                [currentDevice netWorkDidChange:flags];
+            }
         }
     }
     return currentDevice;
 }
 -(void)setCheck:(NSString *)check{
     objc_setAssociatedObject(self, OBJC_UIDEVICE_CHECK, check, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    //抓取状态
+    SCNetworkReachabilityFlags flags=0;
+    BOOL retrieveFlags=SCNetworkReachabilityGetFlags(reachability, &flags);
+    if(retrieveFlags){
+        [self netWorkDidChange:flags];
+    }
 }
 -(NSString *)check{
     return objc_getAssociatedObject(self, OBJC_UIDEVICE_CHECK);
@@ -241,44 +252,39 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     return type;
 }
 -(UIDeviceNetwork)network{
-    if (network!=UIDeviceNetworkNone && self.check) {
-        SCNetworkReachabilityRef checkReachability=SCNetworkReachabilityCreateWithName(NULL, [self.check UTF8String]);
-        if(checkReachability){
-            CFRelease(checkReachability);
-            return network;
-            /*
-            SCNetworkReachabilityFlags flags=0;
-            BOOL didRetrieveFlags=SCNetworkReachabilityGetFlags(checkReachability, &flags);
-            CFRelease(checkReachability);
-            if (didRetrieveFlags && flags!=0) {
-                return network;
-            }*/
-        }
-        network=UIDeviceNetworkNone;
-        [[NSNotificationCenter defaultCenter] postNotificationName:UIDeviceNetWorkDidChangeNotification object:self];
-    }
     return network;
 }
--(void)netWorkDidChange{
-    UIDeviceNetwork temp=UIDeviceNetworkNone;
-    SCNetworkReachabilityFlags flags=0;
-    BOOL didRetrieveFlags=SCNetworkReachabilityGetFlags(reachability, &flags);
-    if(didRetrieveFlags && (flags & kSCNetworkReachabilityFlagsReachable)){
+-(void)netWorkDidChange:(SCNetworkReachabilityFlags)flags{
+    UIDeviceNetwork temp = UIDeviceNetworkNone;
+    if(flags & kSCNetworkReachabilityFlagsReachable){
         if((flags & kSCNetworkReachabilityFlagsConnectionRequired) == 0) {
-            temp=UIDeviceNetworkWiFi;
+            temp = UIDeviceNetworkWiFi;
         }
         if ((((flags & kSCNetworkReachabilityFlagsConnectionOnDemand ) != 0) || (flags & kSCNetworkReachabilityFlagsConnectionOnTraffic) != 0)){
             if ((flags & kSCNetworkReachabilityFlagsInterventionRequired) == 0){
-                temp=UIDeviceNetworkWiFi;
+                temp = UIDeviceNetworkWiFi;
             }
         }
         if ((flags & kSCNetworkReachabilityFlagsIsWWAN) == kSCNetworkReachabilityFlagsIsWWAN){
-            temp=UIDeviceNetworkWWAN;
+            temp = UIDeviceNetworkWWAN;
+        }
+    }
+    if (temp!=UIDeviceNetworkNone && self.check) {
+        SCNetworkReachabilityRef reachability=SCNetworkReachabilityCreateWithName(NULL, [self.check UTF8String]);
+        if(reachability){
+            //抓取状态
+            BOOL retrieveFlags=SCNetworkReachabilityGetFlags(reachability, &flags);
+            CFRelease(reachability);
+            if (NO==retrieveFlags || flags==0) {
+                temp=UIDeviceNetworkNone;
+            }
+        }else{
+            temp=UIDeviceNetworkNone;
         }
     }
     if (temp!=network) {
         network=temp;
-        [[NSNotificationCenter defaultCenter] postNotificationName:UIDeviceNetWorkDidChangeNotification object:self];
+        [[NSNotificationCenter defaultCenter] postNotificationName:UIDeviceNetWorkDidChangeNotification object:[NSNumber numberWithInteger:network]];
     }
 }
 @end
@@ -310,6 +316,15 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     [temp setBackgroundColor:background];
     return temp;
 }
+-(id)roundingCorners:(UIRectCorner)corners size:(CGFloat)size{
+    UIBezierPath *maskPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds byRoundingCorners:corners cornerRadii:CGSizeMake(size, size)];
+    CAShapeLayer *maskLayer=[[CAShapeLayer alloc] init];
+    [maskLayer setPath:maskPath.CGPath];
+    [maskLayer setFrame:self.bounds];
+    [self.layer setMask:maskLayer];
+    [maskLayer release];
+    return self;
+}
 -(id)convertImage{
     UIGraphicsBeginImageContext(self.bounds.size);
     [self.layer renderInContext:UIGraphicsGetCurrentContext()];
@@ -331,13 +346,12 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 //UIImageView****************************************
 @implementation UIImageView(Utils_Category)
 @dynamic URL;
-+(id)viewWithFrame:(CGRect)frame parent:(UIView *)parent{
-    UIImageView *temp=[[self.class alloc] initWithFrame:frame];
-    [temp setContentMode:UIViewContentModeScaleAspectFit];
-    if (parent) {
-        [parent addSubview:temp];
++(instancetype)alloc{
+    UIImageView *temp=[self.class allocWithZone:NSDefaultMallocZone()];
+    if (temp) {
+        [temp setContentMode:UIViewContentModeScaleAspectFit];
     }
-    return [temp autorelease];
+    return temp;
 }
 +(id)viewWithSource:(NSString*)source{
     UIImageView *temp=[[self.class alloc] initWithImage:[UIImage imageWithResource:source]];
@@ -401,13 +415,12 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UILabel****************************************
 @implementation UILabel(Utils_Category)
-+(id)viewWithFrame:(CGRect)frame parent:(UIView *)parent{
-    UILabel *temp=[[self.class alloc] initWithFrame:frame];
-    [temp setBackgroundColor:[UIColor clearColor]];
-    if (parent) {
-        [parent addSubview:temp];
++(instancetype)alloc{
+    UILabel *temp=[self.class allocWithZone:NSDefaultMallocZone()];
+    if (temp) {
+        [temp setBackgroundColor:[UIColor clearColor]];
     }
-    return [temp autorelease];
+    return temp;
 }
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text{
     return [self viewWithFrame:frame parent:parent text:text font:nil color:nil align:NSTextAlignmentLeft];
@@ -430,16 +443,15 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UITextField****************************************
 @implementation UITextField(Utils_Category)
-+(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent{
-    UITextField *temp = [[self.class alloc] initWithFrame:frame];
-    [temp setContentVerticalAlignment:UIControlContentVerticalAlignmentCenter];
-    [temp setAutocorrectionType:UITextAutocorrectionTypeNo];
-    [temp setSpellCheckingType:UITextSpellCheckingTypeNo];
-    [temp setBackgroundColor:[UIColor clearColor]];
-    if (parent) {
-        [parent addSubview:temp];
++(instancetype)alloc{
+    UITextField *temp=[self.class allocWithZone:NSDefaultMallocZone()];
+    if (temp) {
+        [temp setContentVerticalAlignment:UIControlContentVerticalAlignmentCenter];
+        [temp setAutocorrectionType:UITextAutocorrectionTypeNo];
+        [temp setSpellCheckingType:UITextSpellCheckingTypeNo];
+        [temp setBackgroundColor:[UIColor clearColor]];
     }
-    return [temp autorelease];
+    return temp;
 }
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text{
     return [self viewWithFrame:frame parent:parent text:text font:nil color:nil align:NSTextAlignmentLeft];
@@ -462,14 +474,13 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UITextView****************************************
 @implementation UITextView(Utils_Category)
-+(id)viewWithFrame:(CGRect)frame parent:(UIView *)parent{
-    UITextView *temp=[[self.class alloc] initWithFrame:frame];
-    [temp setBackgroundColor:[UIColor clearColor]];
-    [temp setEditable:NO];
-    if (parent) {
-        [parent addSubview:temp];
++(instancetype)alloc{
+    UITextView *temp=[self.class allocWithZone:NSDefaultMallocZone()];
+    if (temp) {
+        [temp setBackgroundColor:[UIColor clearColor]];
+        [temp setEditable:NO];
     }
-    return [temp autorelease];
+    return temp;
 }
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent text:(NSString*)text{
     return [self viewWithFrame:frame parent:parent text:text font:nil color:nil align:NSTextAlignmentLeft];
@@ -547,15 +558,12 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UITableView****************************************
 @implementation UITableView(Utils_Category)
-+(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent{
-    UITableView *temp = [[self.class alloc] initWithFrame:frame];
++(instancetype)alloc{
+    UITableView *temp=[self.class allocWithZone:NSDefaultMallocZone()];
     if ([temp respondsToSelector:@selector(setSeparatorInset:)]) {
         [temp setSeparatorInset:UIEdgeInsetsZero];
     }
-    if (parent) {
-        [parent addSubview:temp];
-    }
-    return [temp autorelease];
+    return temp;
 }
 @end
 
@@ -580,6 +588,46 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         [parent addSubview:temp];
     }
     return [temp autorelease];
+}
+@end
+
+//UIActivityIndicatorView*************************
+@implementation UIActivityIndicatorView(Utils_Category)
++(id)shareInstance{
+    static UIActivityIndicatorView *instance=nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        instance=[[UIActivityIndicatorView alloc] initWithFrame:CGRectMake(0, 0, 80, 80)];
+        [instance setActivityIndicatorViewStyle:UIActivityIndicatorViewStyleWhiteLarge];
+        [instance setBackgroundColor:[UIColor colorWithWhite:0 alpha:0.4]];
+        [[instance layer] setCornerRadius:5.0];
+    });
+    return instance;
+}
++(void)showAtView:(UIView*)view{
+    UIActivityIndicatorView *loading=[UIActivityIndicatorView shareInstance];
+    [loading performSelectorOnMainThread:@selector(showAtView:) withObject:view waitUntilDone:NO];
+}
++(void)hidden{
+    UIActivityIndicatorView *loading=[UIActivityIndicatorView shareInstance];
+    [loading performSelectorOnMainThread:@selector(hidden) withObject:nil waitUntilDone:NO];
+}
+//
+-(void)showAtView:(UIView *)view{
+    UIView *root=[[UIApplication sharedApplication] keyWindow];
+    if (root) {
+        [[Utils keyWindow] setUserInteractionEnabled:NO];
+        [self setCenter:[view convertPoint:CGPointMake(view.bounds.size.width/2, view.bounds.size.height/2) toView:root]];
+        [root addSubview:self];
+        [self startAnimating];
+        [self setHidden:NO];
+    }
+}
+-(void)hidden{
+    [[Utils keyWindow] setUserInteractionEnabled:YES];
+    [self removeFromSuperview];
+    [self setHidden:YES];
+    [self stopAnimating];
 }
 @end
 
@@ -777,7 +825,6 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
             [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
         }
         [self setTmpError:error];
-        [self setTmpData:nil];
         [self closeStream];
         //完成
         isFinish=YES;
