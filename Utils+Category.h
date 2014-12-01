@@ -3,7 +3,7 @@
 //  lib
 //
 //  Created by mac on 14-5-4.
-//  Copyright (c) 2014年 383541328@qq.com. All rights reserved.
+//  Copyright (c) 2014年 tinymedia.cn All rights reserved.
 //
 #import <UIKit/UIKit.h>
 
@@ -139,8 +139,14 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 
 //UIActivityIndicatorView*************************
 @interface UIActivityIndicatorView(Utils_Category)
-+(void)showAtView:(UIView*)view;
++(void)display;
 +(void)hidden;
+@end
+
+//UIAlertView************************************
+@interface UIAlertView(Utils_Category)<UIAlertViewDelegate>
++(instancetype)showWithTitle:(NSString *)title message:(NSString *)message onClick:(void (^)(UIAlertView *alertView, NSInteger index))onClick cancelButtonTitle:(NSString *)cancelButtonTitle otherButtonTitles:(NSString *)otherButtonTitles, ...;
++(instancetype)showWithTitle:(NSString *)title message:(NSString *)message;
 @end
 
 //UIViewController****************************************
