@@ -3,9 +3,14 @@
 //  lib
 //
 //  Created by mac on 13-6-17.
-//  Copyright (c) 2013年 383541328@qq.com All rights reserved.
+//  Copyright (c) 2013年 tinymedia.cn All rights reserved.
 //
 #import <Foundation/Foundation.h>
+//
+#ifndef SQLManager_h
+#define SQLManager_h
+    #define SQLITE_VOID       1978
+#endif
 
 //********************************************
 @interface SQLTransaction : NSObject
@@ -29,10 +34,11 @@
 
 //********************************************
 @interface SQLObject : NSObject
-+(BOOL)mapping:(NSString*)primaryKey;
++(BOOL)mapping:(NSArray*)primaryKeys;
 +(id)find:(NSString *)sql;
 //
 -(id)initWithDictionary:(NSDictionary*)data;
 -(BOOL)delete;
 -(BOOL)save;
 @end
+
