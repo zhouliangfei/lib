@@ -3,14 +3,8 @@
 //  lib
 //
 //  Created by mac on 13-6-17.
-//  Copyright (c) 2013年 383541328@qq.com All rights reserved.
+//  Copyright (c) 2013年 tinymedia.cn All rights reserved.
 //
-
-//
-#ifndef SQLManager_m
-#define SQLManager_m
-    #define SQLITE_VOID       1978
-#endif
 
 #import "SQLManager.h"
 #import <objc/runtime.h>
@@ -196,7 +190,7 @@ static int sqliteConverType(NSString *type){
     if (SQLITE_OK==sqlite3_prepare_v2(database, [sql UTF8String], -1, &statement, NULL)){
         int len=sqlite3_column_count(statement);
         if (len==0) {
-            sqlite3_finalize(statement),statement=NULL;
+            sqlite3_finalize(statement);
         }else{
             NSMutableArray *result=[[NSMutableArray alloc] init];
             while (SQLITE_ROW==sqlite3_step(statement)){
@@ -227,7 +221,7 @@ static int sqliteConverType(NSString *type){
                 [result addObject:rows];
                 [rows release];
             }
-            sqlite3_finalize(statement),statement=NULL;
+            sqlite3_finalize(statement);
             return [result autorelease];
         }
     }else{
@@ -291,7 +285,7 @@ static int sqliteConverType(NSString *type){
             NSInteger itype=sqliteConverType([NSString stringWithUTF8String:property_getAttributes(propertys[i])]);
             if (itype!=SQLITE_VOID) {
                 NSString *name=[NSString stringWithUTF8String:property_getName(propertys[i])];
-                [classField setValue:[NSNumber numberWithInt:itype] forKey:name];
+                [classField setValue:[NSNumber numberWithInteger:itype] forKey:name];
             }
         }
         free(propertys);
@@ -299,27 +293,37 @@ static int sqliteConverType(NSString *type){
     return classField;
 }
 //映射表设置主键
-+(BOOL)mapping:(NSString*)primaryKey{
++(BOOL)mapping:(NSArray*)primaryKeys{
     NSString *className=[NSString stringWithUTF8String:class_getName(self.class)];
-    [[SQLObject primaryKeys] setValue:primaryKey forKey:className];
+    [[SQLObject primaryKeys] setValue:primaryKeys forKey:className];
     //
     NSString *sqliteSql=[NSString stringWithFormat:@"PRAGMA table_info(\"%@\")", className];
     if (nil==[[SQLManager shareInstance] fetch:sqliteSql]) {
         NSDictionary *fieldList=[self fields];
         if (fieldList.allKeys.count>0) {
-            NSMutableArray *values=[NSMutableArray array];
+            NSMutableArray *field=[NSMutableArray array];
             for (NSString *name in fieldList.allKeys) {
                 NSNumber *type=[fieldList objectForKey:name];
-                [values addObject:[NSString stringWithFormat:@"\"%@\" %@ DEFAULT %@", name, sqliteTypeName(type), sqliteReviseValue(type, NULL)]];
+                [field addObject:[NSString stringWithFormat:@"\"%@\" %@ DEFAULT %@", name, sqliteTypeName(type), sqliteReviseValue(type, NULL)]];
             }
-            if (values.count>0) {
-                if (primaryKey && [fieldList objectForKey:primaryKey]) {
-                    sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@,PRIMARY KEY(\"%@\"))", className, [values componentsJoinedByString:@","], primaryKey];
-                    return [[SQLManager shareInstance] query:sqliteSql];
-                }else{
-                    @throw [NSException exceptionWithName:@"mapping" reason:@"must set up valid primary key" userInfo:nil];
+            if (primaryKeys) {
+                NSString *primary=nil;
+                for (id key in primaryKeys) {
+                    if (primary) {
+                        primary=[primary stringByAppendingFormat:@", \"%@\"",key];
+                    }else{
+                        primary=[NSString stringWithFormat:@"\"%@\"",key];
+                    }
                 }
+                if (primary) {
+                    sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@, PRIMARY KEY(%@))", className, [field componentsJoinedByString:@","], primary];
+                }else{
+                    sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@)", className, [field componentsJoinedByString:@","]];
+                }
+            }else{
+                sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@)", className, [field componentsJoinedByString:@","]];
             }
+            return [[SQLManager shareInstance] query:sqliteSql];
         }
     }
     return NO;
@@ -327,8 +331,10 @@ static int sqliteConverType(NSString *type){
 //查询
 +(id)find:(NSString *)sql{
     NSString *className=[NSString stringWithUTF8String:class_getName(self.class)];
-    NSString *sqliteSql=[NSString stringWithFormat:@"SELECT * FROM %@%@", className, (sql ? [NSString stringWithFormat:@" WHERE %@",sql] : @"")];
-    //取内容
+    NSString *sqliteSql=[NSString stringWithFormat:@"SELECT * FROM %@", className];
+    if (sql) {
+        sqliteSql=[sqliteSql stringByAppendingFormat:@" WHERE %@",sql];
+    }
     NSMutableArray *source=[NSMutableArray array];
     NSArray *temp=[[SQLManager shareInstance] fetch:sqliteSql];
     for (id tmp in temp) {
@@ -341,14 +347,12 @@ static int sqliteConverType(NSString *type){
 //初始化
 -(id)initWithDictionary:(NSDictionary*)data{
     self=[super init];
-    if (self) {
-        if (data) {
-            NSDictionary *fieldList=[self.class fields];
-            for (id key in fieldList) {
-                id value=[data objectForKey:key];
-                if (value && value!=[NSNull null]){
-                    [self setValue:value forKey:key];
-                }
+    if (self && data) {
+        NSDictionary *fieldList=[self.class fields];
+        for (id key in fieldList) {
+            id value=[data objectForKey:key];
+            if (value && value!=[NSNull null]){
+                [self setValue:value forKey:key];
             }
         }
     }
@@ -356,11 +360,22 @@ static int sqliteConverType(NSString *type){
 }
 -(BOOL)delete{
     NSString *className=[NSString stringWithUTF8String:class_getName(self.class)];
-    NSString *primaryKey=[[SQLObject primaryKeys] valueForKey:className];
+    NSArray *primaryKey=[[SQLObject primaryKeys] valueForKey:className];
     NSDictionary *fieldList=[self.class fields];
-    if (primaryKey && [fieldList objectForKey:primaryKey]) {
-        NSString *reviValue=sqliteReviseValue([fieldList objectForKey:primaryKey], [self valueForKey:primaryKey]);
-        NSString *sqliteSql=[NSString stringWithFormat:@"DELETE FROM %@ WHERE %@=%@", className, primaryKey, reviValue];
+    if (nil==primaryKey) {
+        primaryKey=fieldList.allKeys;
+    }
+    NSString *values=nil;
+    for (NSString *name in primaryKey) {
+        NSString *value=sqliteReviseValue([fieldList objectForKey:name],[self valueForKey:name]);
+        if (values) {
+            values=[values stringByAppendingFormat:@" AND %@=%@",name,value];
+        }else{
+            values=[NSString stringWithFormat:@"%@=%@",name,value];
+        }
+    }
+    if (values) {
+        NSString *sqliteSql=[NSString stringWithFormat:@"DELETE FROM %@ WHERE %@", className, values];
         return [[SQLManager shareInstance] query:sqliteSql];
     }
     return NO;
