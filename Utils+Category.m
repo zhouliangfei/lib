@@ -3,7 +3,7 @@
 //  lib
 //
 //  Created by mac on 14-5-4.
-//  Copyright (c) 2014年 383541328@qq.com. All rights reserved.
+//  Copyright (c) 2014年 tinymedia.cn All rights reserved.
 //
 #ifndef Utils_Category_m
 #define Utils_Category_m
@@ -13,6 +13,7 @@
 #define OBJC_NSOBJECT_VALUE                   "objc::NSObject::Value"
 #define OBJC_NSOBJECT_SOURCE                  "objc::NSObject::Source"
 #define OBJC_UIIMAGEVIEW_URL                  "objc::UIImageView::URL"
+#define OBJC_UIALERTVIEW_CLICK                "objc::UIAlertView::Click"
 #define OBJC_UIVIEWCONTROLLER_TRANSITIONSTYLE "objc::UIViewController::TransitionStyle"
 #endif
 
@@ -346,15 +347,18 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 //UIImageView****************************************
 @implementation UIImageView(Utils_Category)
 @dynamic URL;
-+(instancetype)alloc{
-    UIImageView *temp=[self.class allocWithZone:NSDefaultMallocZone()];
-    if (temp) {
-        [temp setContentMode:UIViewContentModeScaleAspectFit];
-    }
-    return temp;
-}
 +(id)viewWithSource:(NSString*)source{
-    UIImageView *temp=[[self.class alloc] initWithImage:[UIImage imageWithResource:source]];
+    UIImage *image=[UIImage imageWithResource:source];
+    UIImageView *temp=[[self.class alloc] initWithImage:image];
+    [temp setContentMode:UIViewContentModeScaleAspectFit];
+    return [temp autorelease];
+}
++(id)viewWithFrame:(CGRect)frame parent:(UIView *)parent{
+    UIImageView *temp=[[self.class alloc] initWithFrame:frame];
+    [temp setContentMode:UIViewContentModeScaleAspectFit];
+    if (parent) {
+        [parent addSubview:temp];
+    }
     return [temp autorelease];
 }
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source{
@@ -543,6 +547,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 @end
 
+
 //UIPickerView****************************************
 @implementation UIPickerView(Utils_Category)
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent{
@@ -593,6 +598,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UIActivityIndicatorView*************************
 @implementation UIActivityIndicatorView(Utils_Category)
+static NSInteger referenceCount;
 +(id)shareInstance{
     static UIActivityIndicatorView *instance=nil;
     static dispatch_once_t onceToken;
@@ -601,33 +607,81 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         [instance setActivityIndicatorViewStyle:UIActivityIndicatorViewStyleWhiteLarge];
         [instance setBackgroundColor:[UIColor colorWithWhite:0 alpha:0.4]];
         [[instance layer] setCornerRadius:5.0];
+        referenceCount=0;
     });
     return instance;
 }
-+(void)showAtView:(UIView*)view{
-    UIActivityIndicatorView *loading=[UIActivityIndicatorView shareInstance];
-    [loading performSelectorOnMainThread:@selector(showAtView:) withObject:view waitUntilDone:NO];
++(void)display{
+    [[self shareInstance] performSelectorOnMainThread:@selector(display) withObject:nil waitUntilDone:YES];
 }
 +(void)hidden{
-    UIActivityIndicatorView *loading=[UIActivityIndicatorView shareInstance];
-    [loading performSelectorOnMainThread:@selector(hidden) withObject:nil waitUntilDone:NO];
+    [[self shareInstance] performSelectorOnMainThread:@selector(hidden) withObject:nil waitUntilDone:YES];
 }
 //
--(void)showAtView:(UIView *)view{
-    UIView *root=[[UIApplication sharedApplication] keyWindow];
+-(void)display{
+    referenceCount++;
+    UIView *root=[Utils keyWindow];
     if (root) {
-        [[Utils keyWindow] setUserInteractionEnabled:NO];
-        [self setCenter:[view convertPoint:CGPointMake(view.bounds.size.width/2, view.bounds.size.height/2) toView:root]];
+        [self setCenter:root.center];
         [root addSubview:self];
         [self startAnimating];
         [self setHidden:NO];
     }
 }
 -(void)hidden{
-    [[Utils keyWindow] setUserInteractionEnabled:YES];
-    [self removeFromSuperview];
-    [self setHidden:YES];
-    [self stopAnimating];
+    referenceCount--;
+    if (referenceCount==0 && self.superview) {
+        [self removeFromSuperview];
+        [self setHidden:YES];
+        [self stopAnimating];
+    }
+}
+-(BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event{
+    return !self.hidden;
+}
+@end
+
+//UIAlertView****************************************
+@implementation UIAlertView(Utils_Category)
++(instancetype)showWithTitle:(NSString *)title message:(NSString *)message onClick:(void (^)(UIAlertView *alertView, NSInteger index))onClick cancelButtonTitle:(NSString *)cancelButtonTitle otherButtonTitles:(NSString *)otherButtonTitles, ...{
+    UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:title message:message delegate:nil cancelButtonTitle:cancelButtonTitle otherButtonTitles:nil];
+    //
+    id arg;
+    va_list argList;
+    va_start(argList,otherButtonTitles);
+    while ((arg=va_arg(argList,id))){
+        [alertView addButtonWithTitle:arg];
+    }
+    va_end(argList);
+    //
+    [alertView setDelegate:alertView];
+    [alertView setOnClick:onClick];
+    [alertView show];
+    return [alertView autorelease];
+}
++(instancetype)showWithTitle:(NSString *)title message:(NSString *)message{
+    UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:title message:message delegate:nil cancelButtonTitle:nil otherButtonTitles:nil];
+    [alertView performSelector:@selector(autoClose) withObject:nil afterDelay:1.5];
+    [alertView show];
+    return [alertView autorelease];
+}
+-(void)setOnClick:(void (^)(UIAlertView *alertView, NSInteger index))onClick{
+    objc_setAssociatedObject(self, OBJC_UIALERTVIEW_CLICK, onClick, OBJC_ASSOCIATION_COPY_NONATOMIC);
+}
+-(void (^)(UIAlertView *alertView, NSInteger index))onClick{
+    return objc_getAssociatedObject(self, OBJC_UIALERTVIEW_CLICK);
+}
+-(void)dealloc{
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
+    [super dealloc];
+}
+-(void)alertView:(UIAlertView *)alertView didDismissWithButtonIndex:(NSInteger)buttonIndex{
+    if (self.onClick) {
+        self.onClick(self,buttonIndex);
+    }
+}
+-(void)autoClose{
+    [self dismissWithClickedButtonIndex:0 animated:YES];
 }
 @end
 
@@ -645,30 +699,26 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 //***************************************************************************************************
 @interface NSLoader()<NSStreamDelegate>{
     BOOL isFinish;
-    NSOutputStream *fileStream;
     NSLoaderCachePolicy tmpPriority;
 }
-@property(nonatomic,copy) void (^tmpOnProgress)(NSLoader *target);
-@property(nonatomic,copy) void (^tmpOnComplete)(NSLoader *target);
-@property(nonatomic,retain) NSURLConnection *tmpConnection;
-@property(nonatomic,retain) NSString *tmpCache;
-@property(nonatomic,retain) NSError *tmpError;
-@property(nonatomic,retain) NSData *tmpData;
-@property(nonatomic,retain) NSURL *tmpURL;
+@property(atomic,copy) void (^tmpOnProgress)(NSLoader *target);
+@property(atomic,copy) void (^tmpOnComplete)(NSLoader *target);
+@property(atomic,retain) NSURLConnection *tmpConnection;
+@property(atomic,retain) NSOutputStream *tmpStream;
+@property(atomic,retain) NSString *tmpCache;
+@property(atomic,retain) NSError *tmpError;
+@property(atomic,retain) NSData *tmpData;
+@property(atomic,retain) NSURL *tmpURL;
 @end
 //
 @implementation NSLoader
-@synthesize tmpOnProgress,tmpOnComplete,tmpConnection,tmpCache,tmpError,tmpData,tmpURL;
+@synthesize tmpOnProgress,tmpOnComplete,tmpConnection,tmpStream,tmpCache,tmpError,tmpData,tmpURL;
 @synthesize bytesLoaded,bytesTotal;
 @dynamic connection,error,data,URL;
 +(id)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete{
     NSLoader *temp = [[NSLoader alloc] init];
     [temp request:url post:post cache:cache priority:priority progress:progress complete:complete];
     return [temp autorelease];
-}
--(void)dealloc{
-    [self cancel];
-    [super dealloc];
 }
 -(void)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete{
     [self cancel];
@@ -714,7 +764,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
                         id value = [post objectForKey:key];
                         if (value) {
                             if([value isKindOfClass:[NSData class]]){
-                                NSString *temp = [NSString stringWithFormat:@"\r\n--%@\r\nContent-Disposition: attachment; name=\"%@\"; filename=\"%@\"\r\nContent-Type: application/octet-stream\r\n\r\n", boundary, key, key];
+                                NSString *temp = [NSString stringWithFormat:@"\r\n--%@\r\nContent-Disposition: form-data; name=\"%@\"; filename=\"%@\"\r\nContent-Type: application/octet-stream\r\n\r\n", boundary, key, key];
                                 [body appendData:[temp dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES]];
                                 [body appendData:[NSData dataWithData:value]];
                             }else{
@@ -745,7 +795,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
                 [request setHTTPMethod:@"POST"];
             }
             //
-            [self setTmpConnection:[NSURLConnection connectionWithRequest:request delegate:self]];
+            [self openStream:request savePath:[Utils pathForTemporary:tmpCache]];
             if (nil==tmpOnProgress && nil==tmpOnComplete) {
                 //模拟同步
                 do{
@@ -773,11 +823,10 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     if (nil==self.error) {
         if (tmpData) {
             return tmpData;
-        }else{
-            NSString *filePath=[Utils pathForDocument:tmpCache];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
-                return [NSMutableData dataWithContentsOfFile:filePath];
-            }
+        }
+        NSString *filePath=[Utils pathForDocument:tmpCache];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+            return [NSMutableData dataWithContentsOfFile:filePath];
         }
     }
     return nil;
@@ -789,29 +838,35 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     bytesLoaded=0;
     tmpPriority=NSLoaderCachePolicyNULL;
     //
-    [tmpConnection cancel];
-    [self setTmpOnProgress:nil];
-    [self setTmpOnComplete:nil];
-    [self setTmpConnection:nil];
+    [self closeStream];
+    [self setTmpURL:nil];
+    [self setTmpData:nil];
     [self setTmpError:nil];
     [self setTmpCache:nil];
-    [self setTmpData:nil];
-    [self setTmpURL:nil];
-    [self closeStream];
+    [self setTmpOnComplete:nil];
+    [self setTmpOnProgress:nil];
 }
--(void)openStream:(NSString*)filePath{
+-(void)openStream:(NSURLRequest*)request savePath:(NSString*)savePath{
     [self closeStream];
-    if (nil==fileStream) {
-        fileStream=[[NSOutputStream alloc] initToFileAtPath:filePath append:YES];
-        [fileStream open];
+    if (nil==tmpConnection) {
+        [self setTmpConnection:[NSURLConnection connectionWithRequest:request delegate:self]];
+    }
+    if (nil==tmpStream) {
+        [self setTmpStream:[NSOutputStream outputStreamToFileAtPath:savePath append:YES]];
+        if (tmpStream) {
+            [tmpStream open];
+        }
     }
 }
 -(void)closeStream{
-    if (fileStream) {
-        [fileStream close];
-        [fileStream release];
+    if (tmpConnection) {
+        [tmpConnection cancel];
+        [self setTmpConnection:nil];
     }
-    fileStream=nil;
+    if (tmpStream) {
+        [tmpStream close];
+        [self setTmpStream:nil];
+    }
 }
 //
 -(NSCachedURLResponse *)connection:(NSURLConnection *)connection willCacheResponse:(NSCachedURLResponse *)cachedResponse{
@@ -824,10 +879,11 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
             [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
         }
-        [self setTmpError:error];
-        [self closeStream];
         //完成
         isFinish=YES;
+        [self closeStream];
+        [self setTmpData:nil];
+        [self setTmpError:error];
         if (tmpOnComplete) {
             tmpOnComplete(self);
         }
@@ -839,24 +895,23 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
         if(httpResponse && [httpResponse respondsToSelector:@selector(allHeaderFields)]){
             bytesTotal=[[[httpResponse allHeaderFields] objectForKey:@"Content-Length"] longLongValue];
         }
-        [self openStream:[Utils pathForTemporary:tmpCache]];
-        isFinish=NO;
     }
 }
 -(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data{
-    if ([self connection]==connection && fileStream) {
+    if ([self connection]==connection && tmpStream) {
         const uint8_t *dataBytes=[data bytes];
         NSInteger dataLength=[data length];
         NSInteger bytesWrittenSoFar=0;
         NSInteger bytesWritten=0;
         do {
-            bytesWritten=[fileStream write:&dataBytes[bytesWrittenSoFar] maxLength:dataLength-bytesWrittenSoFar];
-            if (bytesWritten > 0) {
-                bytesWrittenSoFar += bytesWritten;
-            } else {
+            bytesWritten=[tmpStream write:&dataBytes[bytesWrittenSoFar] maxLength:dataLength-bytesWrittenSoFar];
+            assert(bytesWritten!=0);
+            if (bytesWritten==-1) {
                 break;
+            } else {
+                bytesWrittenSoFar+=bytesWritten;
             }
-        } while (bytesWrittenSoFar != dataLength);
+        }while(bytesWrittenSoFar!=dataLength);
         //进度
         bytesLoaded+=bytesWrittenSoFar;
         if (tmpOnProgress) {
@@ -872,14 +927,18 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
             if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                 [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
             }
-            [[NSFileManager defaultManager] moveItemAtPath:tempPath toPath:filePath error:nil];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
+                [[NSFileManager defaultManager] moveItemAtPath:tempPath toPath:filePath error:nil];
+            }
         }else{
-            [self setTmpData:[NSData dataWithContentsOfFile:tempPath]];
-            [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
+                [self setTmpData:[NSData dataWithContentsOfFile:tempPath]];
+                [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+            }
         }
-        [self closeStream];
         //完成
         isFinish=YES;
+        [self closeStream];
         if (tmpOnComplete) {
             tmpOnComplete(self);
         }
