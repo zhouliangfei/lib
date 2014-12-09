@@ -18,16 +18,89 @@
 #endif
 
 #import "Utils+Category.h"
-#import <SystemConfiguration/SystemConfiguration.h>
-#import <CommonCrypto/CommonDigest.h>
-#import <CommonCrypto/CommonCrypto.h>
-#import <objc/runtime.h>
-#import <sys/utsname.h>
-#import <sys/socket.h>
-#import <arpa/inet.h>
-#import <ifaddrs.h>
-#import <netdb.h>
-
+//
+//富文本
+NSAttributedString* parseAttribute(NSString *markup){
+    NSMutableAttributedString *aString =[[NSMutableAttributedString alloc] init];
+    //
+    NSRegularExpression *regex = [[NSRegularExpression alloc] initWithPattern:@"(.*?)(\\{(([^\\{\\}]+)|(\\{([^\\{\\}]+)*\\}))*\\})" options:NSRegularExpressionDotMatchesLineSeparators error:nil];
+    NSArray *matches=[regex matchesInString:markup options:0 range:NSMakeRange(0, [markup length])];
+    [regex release];
+    //
+    for (NSTextCheckingResult *result in matches) {
+        if (result.range.length>0) {
+            NSRange range=[result rangeAtIndex:1];
+            if (range.length>0) {
+                NSString *string=[markup substringWithRange:range];
+                NSMutableDictionary *attribute=[NSMutableDictionary dictionary];
+                //
+                range=[result rangeAtIndex:2];
+                if (range.length>0) {
+                    NSError *err=nil;
+                    NSString *repString=[markup substringWithRange:range];
+                    NSData *data=[[repString stringByReplacingOccurrencesOfString:@"'" withString:@"\""] dataUsingEncoding: NSUTF8StringEncoding];
+                    NSDictionary *dictionary=[NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&err];
+                    if (nil==err && [NSJSONSerialization isValidJSONObject:attribute]){
+                        for (NSString *key in dictionary.allKeys) {
+                            id value=[dictionary objectForKey:key];
+                            //字体
+                            UIFont *font=[attribute valueForKey:NSFontAttributeName];
+                            if (nil==font) {
+                                font=[UIFont systemFontOfSize:[UIFont systemFontSize]];
+                                [attribute setValue:font forKey:NSFontAttributeName];
+                            }
+                            if ([key isEqualToString:@"size"]) {
+                                font=[UIFont fontWithName:font.familyName size:[value floatValue]];
+                                [attribute setValue:font forKey:NSFontAttributeName];
+                            }
+                            if ([key isEqualToString:@"face"]) {
+                                font=[UIFont fontWithName:value size:font.pointSize];
+                                [attribute setValue:font forKey:NSFontAttributeName];
+                            }
+                            //颜色
+                            if ([key isEqualToString:@"color"]) {
+                                unsigned color;
+                                [[NSScanner scannerWithString:value] scanHexInt:&color];
+                                //
+                                CGFloat bc = (float)(color & 0xFF) / 255.0;
+                                CGFloat gc = (float)((color & 0xFF00) >> 8) / 255.0;
+                                CGFloat rc = (float)((color & 0xFF0000) >> 16) / 255.0;
+                                [attribute setValue:[UIColor colorWithRed:rc green:gc blue:bc alpha:1.0] forKey:NSForegroundColorAttributeName];
+                            }
+                            //字间距
+                            if ([key isEqualToString:@"kerning"]) {
+                                [attribute setValue:[NSNumber numberWithInt:[value floatValue]] forKey:NSKernAttributeName];
+                            }
+                            //下划线
+                            if ([key isEqualToString:@"underline"]) {
+                                [attribute setValue:[NSNumber numberWithInt:[value intValue]] forKey:NSUnderlineStyleAttributeName];
+                            }
+                            //段落样式
+                            NSMutableParagraphStyle *paragraphStyle=[attribute valueForKey:NSParagraphStyleAttributeName];
+                            if (nil==paragraphStyle) {
+                                paragraphStyle=[[NSMutableParagraphStyle alloc] init];
+                                [paragraphStyle setLineBreakMode:NSLineBreakByWordWrapping];
+                                [attribute setValue:paragraphStyle forKey:NSParagraphStyleAttributeName];
+                                [paragraphStyle release];
+                            }
+                            if ([key isEqualToString:@"leading"]) {
+                                [paragraphStyle setLineSpacing:[value floatValue]];
+                            }
+                            if ([key isEqualToString:@"alignment"]) {
+                                [paragraphStyle setAlignment:[value integerValue]];
+                            }
+                        }
+                    }
+                }
+                //
+                NSAttributedString *attString=[[NSAttributedString alloc] initWithString:string attributes:attribute];
+                [aString appendAttributedString:attString];
+                [attString release];
+            }
+        }
+    }
+    return [aString autorelease];
+}
 
 //NSGlobal****************************************
 @implementation NSGlobal;
@@ -143,14 +216,123 @@ NSString* NSStringFromColor(UIColor* color){
     return nil;
 }
 @implementation NSString (Utils_Category)
+static const char encodingTable[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 -(id)dateFromFormatter:(NSString*)format{
     if (format && [format isKindOfClass:[NSString class]]) {
-        NSDateFormatter *formatter=[[[NSDateFormatter alloc] init] autorelease];
-        [formatter setDateStyle:NSDateFormatterShortStyle];
+        NSDateFormatter *formatter=[NSDateFormatter shareInstance];
         [formatter setDateFormat:format];
         return [formatter dateFromString:self];
     }
     return nil;
+}
+-(NSString *)base64Encoded{
+    if ([self length]==0){
+        return nil;
+    }
+    //
+    NSData *data=[self dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
+    char *characters=malloc((([data length]+2)/3)*4);
+    if (characters==NULL){
+        return nil;
+    }
+    NSUInteger i=0;
+    NSUInteger length=0;
+    while (i<[data length]){
+        char buffer[3]={0,0,0};
+        short bufferLength = 0;
+        while (bufferLength<3 && i<[data length]){
+            buffer[bufferLength++]=((char *)[data bytes])[i++];
+        }
+        characters[length++]=encodingTable[(buffer[0] & 0xFC) >> 2];
+        characters[length++]=encodingTable[((buffer[0] & 0x03) << 4) | ((buffer[1] & 0xF0) >> 4)];
+        if (bufferLength>1){
+            characters[length++]=encodingTable[((buffer[1] & 0x0F) << 2) | ((buffer[2] & 0xC0) >> 6)];
+        }else {
+            characters[length++]='=';
+        }
+        if (bufferLength > 2){
+            characters[length++]=encodingTable[buffer[2] & 0x3F];
+        }else {
+            characters[length++]='=';
+        }
+    }
+    return [[[NSString alloc] initWithBytesNoCopy:characters length:length encoding:NSASCIIStringEncoding freeWhenDone:YES] autorelease];
+}
+-(NSString *)base64Decoded{
+    static char *decodingTable=NULL;
+    if (decodingTable==NULL){
+        decodingTable=malloc(256);
+        if (decodingTable==NULL){
+            return nil;
+        }
+        memset(decodingTable, CHAR_MAX, 256);
+        for (uint i=0; i<64; i++){
+            decodingTable[(short)encodingTable[i]] = i;
+        }
+    }
+    //
+    if ([self length]==0){
+        return nil;
+    }
+    const char *characters=[self cStringUsingEncoding:NSASCIIStringEncoding];
+    if (characters==NULL){
+        return nil;
+    }
+    char *bytes=malloc((([self length]+3)/4)*3);
+    if (bytes==NULL){
+        return nil;
+    }
+    //
+    NSUInteger i=0;
+    NSUInteger length=0;
+    while (YES){
+        char buffer[4];
+        short bufferLength;
+        for (bufferLength=0; bufferLength<4; i++){
+            if (characters[i]=='\0'){
+                break;
+            }
+            if (isspace(characters[i])||characters[i]=='='){
+                continue;
+            }
+            buffer[bufferLength] = decodingTable[(short)characters[i]];
+            if (buffer[bufferLength++] == CHAR_MAX){
+                free(bytes);
+                return nil;
+            }
+        }
+        if (bufferLength==0){
+            break;
+        }
+        if (bufferLength==1){
+            free(bytes);
+            return nil;
+        }
+        bytes[length++]=(buffer[0] << 2) | (buffer[1] >> 4);
+        if (bufferLength>2){
+            bytes[length++]=(buffer[1] << 4) | (buffer[2] >> 2);
+        }
+        if (bufferLength>3){
+            bytes[length++]=(buffer[2] << 6) | buffer[3];
+        }
+    }
+    realloc(bytes, length);
+    //
+    return  [[[NSString alloc] initWithBytesNoCopy:bytes length:length encoding:NSASCIIStringEncoding freeWhenDone:YES] autorelease];
+}
+@end
+
+//NSDateFormatter*********************************
+@implementation NSDateFormatter(Utils_Category)
++(NSDateFormatter*)shareInstance{
+    static NSDateFormatter *instance=nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        instance = [[NSDateFormatter alloc] init];
+        [instance setDateStyle:NSDateFormatterFullStyle];
+        [instance setLocale:[[[NSLocale alloc] initWithLocaleIdentifier:@"zh_CN"] autorelease]];
+    });
+    return instance;
 }
 @end
 
@@ -158,8 +340,7 @@ NSString* NSStringFromColor(UIColor* color){
 @implementation NSDate (Utils_Category)
 -(id)stringFromFormatter:(NSString*)format{
     if (format && [format isKindOfClass:[NSString class]]) {
-        NSDateFormatter *formatter=[[[NSDateFormatter alloc] init] autorelease];
-        [formatter setDateStyle:NSDateFormatterShortStyle];
+        NSDateFormatter *formatter=[NSDateFormatter shareInstance];
         [formatter setDateFormat:format];
         return [formatter stringFromDate:self];
     }
@@ -168,20 +349,22 @@ NSString* NSStringFromColor(UIColor* color){
 @end
 
 //UIColor****************************************
-UIColor* UIColorFromString(NSString *string){
-    if (string && [string isKindOfClass:[NSString class]]) {
-        unsigned color;
-        [[NSScanner scannerWithString:string] scanHexInt:&color];
-        return [UIColor colorWithHex:color];
+NSNumber* NSNumberFromColor(UIColor* color){
+    if (color && [color isKindOfClass:[UIColor class]]) {
+        const CGFloat *c=CGColorGetComponents(color.CGColor);
+        uint rc=(int)(0xFF*c[0])<<16;
+        uint gc=(int)(0xFF*c[1])<<8;
+        uint bc=(int)(0xFF*c[2]);
+        return [NSNumber numberWithInteger:rc+gc+bc];
     }
     return nil;
 }
 @implementation UIColor(Utils_Category)
 @dynamic image;
 +(UIColor*)colorWithHex:(uint)value{
-    float rc = (value & 0xFF0000) >> 16;
-    float gc = (value & 0xFF00) >> 8;
-    float bc = (value & 0xFF);
+    float rc=(value & 0xFF0000)>>16;
+    float gc=(value & 0xFF00)>>8;
+    float bc=(value & 0xFF);
     return [UIColor colorWithRed:rc/255.0 green:gc/255.0 blue:bc/255.0 alpha:1.0];
 }
 -(id)image{

@@ -34,8 +34,8 @@
 
 //********************************************
 @interface SQLObject : NSObject
-+(BOOL)mapping:(NSArray*)primaryKeys;
-+(id)find:(NSString *)sql;
++(BOOL)mapping:(NSString*)primaryKey ,...;
++(id)find:(NSString *)find ,...;
 //
 -(id)initWithDictionary:(NSDictionary*)data;
 -(BOOL)delete;

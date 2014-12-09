@@ -293,9 +293,25 @@ static int sqliteConverType(NSString *type){
     return classField;
 }
 //映射表设置主键
-+(BOOL)mapping:(NSArray*)primaryKeys{
++(BOOL)mapping:(NSString*)primaryKey ,...{
+    //取不定参数
+    NSMutableArray *primaryKeys=[NSMutableArray array];
+    if (primaryKey) {
+        [primaryKeys addObject: primaryKey];
+        //
+        NSString *eachObject;
+        va_list argumentList;
+        va_start(argumentList, primaryKey);
+        while ((eachObject=va_arg(argumentList, NSString*))){
+            [primaryKeys addObject: eachObject];
+        }
+        va_end(argumentList);
+    }
+    //
     NSString *className=[NSString stringWithUTF8String:class_getName(self.class)];
-    [[SQLObject primaryKeys] setValue:primaryKeys forKey:className];
+    if (primaryKeys.count>0) {
+        [[SQLObject primaryKeys] setValue:primaryKeys forKey:className];
+    }
     //
     NSString *sqliteSql=[NSString stringWithFormat:@"PRAGMA table_info(\"%@\")", className];
     if (nil==[[SQLManager shareInstance] fetch:sqliteSql]) {
@@ -306,7 +322,7 @@ static int sqliteConverType(NSString *type){
                 NSNumber *type=[fieldList objectForKey:name];
                 [field addObject:[NSString stringWithFormat:@"\"%@\" %@ DEFAULT %@", name, sqliteTypeName(type), sqliteReviseValue(type, NULL)]];
             }
-            if (primaryKeys) {
+            if (primaryKeys.count>0) {
                 NSString *primary=nil;
                 for (id key in primaryKeys) {
                     if (primary) {
@@ -315,11 +331,7 @@ static int sqliteConverType(NSString *type){
                         primary=[NSString stringWithFormat:@"\"%@\"",key];
                     }
                 }
-                if (primary) {
-                    sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@, PRIMARY KEY(%@))", className, [field componentsJoinedByString:@","], primary];
-                }else{
-                    sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@)", className, [field componentsJoinedByString:@","]];
-                }
+                sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@, PRIMARY KEY(%@))", className, [field componentsJoinedByString:@","], primary];
             }else{
                 sqliteSql=[NSString stringWithFormat:@"CREATE TABLE %@ (%@)", className, [field componentsJoinedByString:@","]];
             }
@@ -329,20 +341,34 @@ static int sqliteConverType(NSString *type){
     return NO;
 }
 //查询
-+(id)find:(NSString *)sql{
++(id)find:(NSString *)find ,...{
     NSString *className=[NSString stringWithUTF8String:class_getName(self.class)];
-    NSString *sqliteSql=[NSString stringWithFormat:@"SELECT * FROM %@", className];
-    if (sql) {
-        sqliteSql=[sqliteSql stringByAppendingFormat:@" WHERE %@",sql];
+    NSMutableArray *froms=[NSMutableArray arrayWithObject:className];
+    if (find) {
+        NSString *eachObject;
+        va_list argumentList;
+        va_start(argumentList, find);
+        while ((eachObject=va_arg(argumentList, NSString*))){
+            [froms addObject: eachObject];
+        }
+        va_end(argumentList);
     }
-    NSMutableArray *source=[NSMutableArray array];
+    NSString *sqliteSql=[NSString stringWithFormat:@"SELECT %@.* FROM %@ ", className,[froms componentsJoinedByString:@","]];
+    if (find) {
+        sqliteSql=[sqliteSql stringByAppendingFormat:@"WHERE %@",find];
+    }
+    //
     NSArray *temp=[[SQLManager shareInstance] fetch:sqliteSql];
-    for (id tmp in temp) {
-        id tmpVal=[[self.class alloc] initWithDictionary:tmp];
-        [source addObject:tmpVal];
-        [tmpVal release];
+    if (temp) {
+        NSMutableArray *source=[NSMutableArray array];
+        for (id tmp in temp) {
+            id tmpVal=[[self.class alloc] initWithDictionary:tmp];
+            [source addObject:tmpVal];
+            [tmpVal release];
+        }
+        return source;
     }
-    return source;
+    return nil;
 }
 //初始化
 -(id)initWithDictionary:(NSDictionary*)data{

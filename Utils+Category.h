@@ -6,6 +6,18 @@
 //  Copyright (c) 2014年 tinymedia.cn All rights reserved.
 //
 #import <UIKit/UIKit.h>
+#import <SystemConfiguration/SystemConfiguration.h>
+#import <CommonCrypto/CommonDigest.h>
+#import <CommonCrypto/CommonCrypto.h>
+#import <objc/runtime.h>
+#import <sys/utsname.h>
+#import <sys/socket.h>
+#import <arpa/inet.h>
+#import <ifaddrs.h>
+#import <netdb.h>
+
+//富文本
+NSAttributedString* parseAttribute(NSString *markup);
 
 //NSGlobal****************************************
 @interface NSGlobal : NSObject;
@@ -38,9 +50,15 @@
 //NSString****************************************
 NSString* MD5(NSString* string);
 NSString* NSDocuments(void);
-NSString* NSStringFromColor(UIColor* color);
 @interface NSString (Utils_Category)
 -(id)dateFromFormatter:(NSString*)format;
+-(NSString*)base64Encoded;
+-(NSString*)base64Decoded;
+@end
+
+//NSDateFormatter********************************
+@interface NSDateFormatter(Utils_Category)
++(NSDateFormatter*)shareInstance;
 @end
 
 //NSDate****************************************
@@ -49,7 +67,7 @@ NSString* NSStringFromColor(UIColor* color);
 @end
 
 //UIColor****************************************
-UIColor* UIColorFromString(NSString *string);
+NSNumber* NSNumberFromColor(UIColor* color);
 @interface UIColor(Utils_Category)
 @property(nonatomic,readonly) UIImage *image;
 +(UIColor*)colorWithHex:(uint)value;
