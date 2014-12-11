@@ -104,7 +104,7 @@ NSAttributedString* parseAttribute(NSString *markup){
 
 //NSGlobal****************************************
 @implementation NSGlobal;
-+(NSMutableDictionary*)shareGlobal{
++(NSMutableDictionary*)shareInstance{
     static NSMutableDictionary *instance=nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -113,16 +113,19 @@ NSAttributedString* parseAttribute(NSString *markup){
     return instance;
 }
 +(void)setValue:(id)value forKey:(NSString*)forKey{
-    [[self shareGlobal] setValue:value forKey:forKey];
+    [[NSGlobal shareInstance] setValue:value forKey:forKey];
 }
 +(id)valueForKey:(NSString*)forKey{
-    return [[self shareGlobal] valueForKey:forKey];
+    return [[NSGlobal shareInstance] valueForKey:forKey];
 }
 @end
 
 //NSJson****************************************
 @implementation NSJson
 +(id)parse:(NSString*)object{
+    if ([NSJSONSerialization isValidJSONObject:object]) {
+        return object;
+    }
     if ([object isKindOfClass:[NSString class]]){
         NSData *data = [object dataUsingEncoding: NSUTF8StringEncoding];
         if (data) {
@@ -136,6 +139,9 @@ NSAttributedString* parseAttribute(NSString *markup){
     return nil;
 }
 +(NSString*)stringify:(id)object{
+    if ([object isKindOfClass:[NSString class]]){
+        return object;
+    }
     if ([NSJSONSerialization isValidJSONObject:object]){
         NSError *error = nil;
         NSData *data = [NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingPrettyPrinted error:&error];
@@ -483,6 +489,24 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 }
 +(id)imageWithTemporary:(NSString*)path{
     return [UIImage imageWithContentsOfFile:[Utils pathForTemporary:path]];
+}
+-(id)imageWithTintColor:(UIColor*)tintColor{
+    if (tintColor) {
+        CGRect bounds = (CGRect){.origin=CGPointZero,.size=self.size};
+        
+        UIGraphicsBeginImageContextWithOptions(bounds.size, NO, self.scale);
+        CGContextSetFillColorWithColor(UIGraphicsGetCurrentContext(), tintColor.CGColor);
+        UIRectFill(bounds);
+        //kCGBlendModeOverlay保留灰度信息
+        [self drawInRect:bounds blendMode:kCGBlendModeOverlay alpha:1.0f];
+        //kCGBlendModeDestinationIn保留透明度信息
+        [self drawInRect:bounds blendMode:kCGBlendModeDestinationIn alpha:1.0f];
+        
+        UIImage *tintedImage = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        return tintedImage;
+    }
+    return self;
 }
 @end
 

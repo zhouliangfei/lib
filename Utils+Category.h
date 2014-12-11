@@ -98,6 +98,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 +(id)imageWithDocument:(NSString*)path;
 +(id)imageWithResource:(NSString*)path;
 +(id)imageWithTemporary:(NSString*)path;
+-(id)imageWithTintColor:(UIColor*)tintColor;
 @end
 
 //UIView****************************************
