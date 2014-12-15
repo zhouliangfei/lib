@@ -1214,7 +1214,7 @@ static NSInteger referenceCount;
 +(id)openWithName:(NSString*)name{
     Class class = NSClassFromString(name);
     if (class) {
-        UIViewController *parentController = [[Utils rootController] visibleViewController];
+        UIViewController *parentController = [[Utils rootController] topViewController];
         if (parentController) {
             UIViewController *viewController = [[[class alloc] initWithNibName:nil bundle:nil] autorelease];
             [parentController addChildViewController:viewController];
@@ -1225,7 +1225,7 @@ static NSInteger referenceCount;
     return nil;
 }
 +(id)close{
-    UIViewController *parentController = [[Utils rootController] visibleViewController];
+    UIViewController *parentController = [[Utils rootController] topViewController];
     if (parentController) {
         UIViewController *viewController = [[parentController childViewControllers] lastObject];
         if (viewController) {
