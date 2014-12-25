@@ -1100,7 +1100,7 @@ static NSInteger referenceCount;
     if ([self connection]==connection) {
         NSHTTPURLResponse *httpResponse=(NSHTTPURLResponse *)response;
         if(httpResponse && [httpResponse respondsToSelector:@selector(allHeaderFields)]){
-            bytesTotal=[[[httpResponse allHeaderFields] objectForKey:@"Content-Length"] longLongValue];
+            bytesTotal=bytesLoaded+[[[httpResponse allHeaderFields] objectForKey:@"Content-Length"] longLongValue];
         }
     }
 }
