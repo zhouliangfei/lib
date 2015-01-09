@@ -104,7 +104,7 @@ NSAttributedString* parseAttribute(NSString *markup){
 
 //NSGlobal****************************************
 @implementation NSGlobal;
-+(NSMutableDictionary*)shareInstance{
++(NSMutableDictionary*)shareGlobal{
     static NSMutableDictionary *instance=nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -113,10 +113,10 @@ NSAttributedString* parseAttribute(NSString *markup){
     return instance;
 }
 +(void)setValue:(id)value forKey:(NSString*)forKey{
-    [[NSGlobal shareInstance] setValue:value forKey:forKey];
+    [[self shareGlobal] setValue:value forKey:forKey];
 }
 +(id)valueForKey:(NSString*)forKey{
-    return [[NSGlobal shareInstance] valueForKey:forKey];
+    return [[self shareGlobal] valueForKey:forKey];
 }
 @end
 
@@ -130,8 +130,8 @@ NSAttributedString* parseAttribute(NSString *markup){
         NSData *data = [object dataUsingEncoding: NSUTF8StringEncoding];
         if (data) {
             NSError *error = nil;
-            id temp = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&error];
-            if (nil == error && [NSJSONSerialization isValidJSONObject:temp]){
+            id temp=[NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&error];
+            if (nil==error && [NSJSONSerialization isValidJSONObject:temp]){
                 return temp;
             }
         }
@@ -208,19 +208,6 @@ NSString* MD5(NSString* string){
     }
     return nil;
 }
-NSString* NSDocuments(void){
-    return [NSHomeDirectory() stringByAppendingPathComponent:@"Documents"];
-}
-NSString* NSStringFromColor(UIColor* color){
-    if (color && [color isKindOfClass:[UIColor class]]) {
-        const CGFloat *c = CGColorGetComponents(color.CGColor);
-        int rc = 255.0 * c[0];
-        int gc = 255.0 * c[1];
-        int bc = 255.0 * c[2];
-        return [NSString stringWithFormat:COLOR_RGBFORMAT,rc,gc,bc];
-    }
-    return nil;
-}
 @implementation NSString (Utils_Category)
 static const char encodingTable[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 -(id)dateFromFormatter:(NSString*)format{
@@ -236,7 +223,7 @@ static const char encodingTable[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
         return nil;
     }
     //
-    NSData *data=[self dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
+    NSData *data=[self dataUsingEncoding:NSASCIIStringEncoding allowLossyConversion:YES];
     char *characters=malloc((([data length]+2)/3)*4);
     if (characters==NULL){
         return nil;
@@ -368,9 +355,9 @@ NSNumber* NSNumberFromColor(UIColor* color){
 @implementation UIColor(Utils_Category)
 @dynamic image;
 +(UIColor*)colorWithHex:(uint)value{
-    float rc=(value & 0xFF0000)>>16;
-    float gc=(value & 0xFF00)>>8;
-    float bc=(value & 0xFF);
+    float rc = (value & 0xFF0000) >> 16;
+    float gc = (value & 0xFF00) >> 8;
+    float bc = (value & 0xFF);
     return [UIColor colorWithRed:rc/255.0 green:gc/255.0 blue:bc/255.0 alpha:1.0];
 }
 -(id)image{
@@ -481,16 +468,13 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 //UIImage****************************************
 @implementation UIImage(Utils_Category)
-+(id)imageWithDocument:(NSString*)path{
-    return [UIImage imageWithContentsOfFile:[Utils pathForDocument:path]];
-}
 +(id)imageWithResource:(NSString*)path{
     return [UIImage imageWithContentsOfFile:[Utils pathForResource:path]];
 }
-+(id)imageWithTemporary:(NSString*)path{
-    return [UIImage imageWithContentsOfFile:[Utils pathForTemporary:path]];
++(id)imageWithMaterial:(NSString*)path{
+    return [UIImage imageWithContentsOfFile:[Utils pathForMaterial:path]];
 }
--(id)imageWithTintColor:(UIColor*)tintColor{
+-(UIImage*)imageWithTintColor:(UIColor*)tintColor{
     if (tintColor) {
         CGRect bounds = (CGRect){.origin=CGPointZero,.size=self.size};
         
@@ -573,9 +557,9 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     [temp setImage:[UIImage imageWithResource:source]];
     return temp;
 }
-+(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent document:(NSString*)document{
++(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent material:(NSString*)material{
     UIImageView *temp=[self.class viewWithFrame:frame parent:parent];
-    [temp setImage:[UIImage imageWithDocument:document]];
+    [temp setImage:[UIImage imageWithMaterial:material]];
     return temp;
 }
 //移魂大法重写dealloc
@@ -616,9 +600,11 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
     //
     __block UIImageView *blockSelf=self;
     [self.loader request:URL post:nil cache:nil priority:NSLoaderCachePolicyLocalData progress:nil complete:^(NSLoader *target) {
-        [blockSelf performSelectorOnMainThread:@selector(setImage:) withObject:[UIImage imageWithData:target.data] waitUntilDone:YES];
-        if (onComplete) {
-            onComplete(blockSelf);
+        if (nil==target.error) {
+            [blockSelf performSelectorOnMainThread:@selector(setImage:) withObject:[UIImage imageWithData:target.data] waitUntilDone:YES];
+            if (onComplete) {
+                onComplete(blockSelf);
+            }
         }
     }];
 }
@@ -853,13 +839,15 @@ static NSInteger referenceCount;
 +(instancetype)showWithTitle:(NSString *)title message:(NSString *)message onClick:(void (^)(UIAlertView *alertView, NSInteger index))onClick cancelButtonTitle:(NSString *)cancelButtonTitle otherButtonTitles:(NSString *)otherButtonTitles, ...{
     UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:title message:message delegate:nil cancelButtonTitle:cancelButtonTitle otherButtonTitles:otherButtonTitles,nil];
     //
-    id arg;
-    va_list argList;
-    va_start(argList,otherButtonTitles);
-    while ((arg=va_arg(argList,id))){
-        [alertView addButtonWithTitle:arg];
+    if (otherButtonTitles) {
+        id arg;
+        va_list argList;
+        va_start(argList,otherButtonTitles);
+        while ((arg=va_arg(argList,id))){
+            [alertView addButtonWithTitle:arg];
+        }
+        va_end(argList);
     }
-    va_end(argList);
     //
     [alertView setDelegate:alertView];
     [alertView setOnClick:onClick];
@@ -943,7 +931,7 @@ static NSInteger referenceCount;
         }
         //
         BOOL hasCache=NO;
-        NSString *filePath=[Utils pathForDocument:tmpCache];
+        NSString *filePath=[Utils pathForMaterial:tmpCache];
         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
             bytesLoaded=[[[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil] fileSize];
             bytesTotal=bytesLoaded;
@@ -957,7 +945,7 @@ static NSInteger referenceCount;
         }else{
             NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:url];
             //取已下载的数据大小
-            NSString *tempPath=[Utils pathForTemporary:tmpCache];
+            NSString *tempPath=[Utils pathForCaches:tmpCache];
             if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
                 bytesLoaded=[[[NSFileManager defaultManager] attributesOfItemAtPath:tempPath error:nil] fileSize];
                 [request addValue:[NSString stringWithFormat:@"bytes=%llu-", bytesLoaded] forHTTPHeaderField:@"Range"];
@@ -1002,9 +990,8 @@ static NSInteger referenceCount;
                 [request setHTTPMethod:@"POST"];
             }
             //
-            [self openStream:request savePath:[Utils pathForTemporary:tmpCache]];
+            [self openStream:request savePath:[Utils pathForCaches:tmpCache]];
             if (nil==tmpOnProgress && nil==tmpOnComplete) {
-                //模拟同步
                 do{
                     [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]];
                 }while(!isFinish);
@@ -1031,9 +1018,11 @@ static NSInteger referenceCount;
         if (tmpData) {
             return tmpData;
         }
-        NSString *filePath=[Utils pathForDocument:tmpCache];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
-            return [NSMutableData dataWithContentsOfFile:filePath];
+        if (tmpCache) {
+            NSString *filePath=[Utils pathForMaterial:tmpCache];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+                return [NSMutableData dataWithContentsOfFile:filePath];
+            }
         }
     }
     return nil;
@@ -1041,11 +1030,19 @@ static NSInteger referenceCount;
 //
 -(void)cancel{
     isFinish=YES;
+    [self closeStream];
+    //
+    if (tmpCache) {
+        NSString *tempPath=[Utils pathForCaches:tmpCache];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
+            [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+        }
+    }
+    //
     bytesTotal=0;
     bytesLoaded=0;
     tmpPriority=NSLoaderCachePolicyNULL;
     //
-    [self closeStream];
     [self setTmpURL:nil];
     [self setTmpData:nil];
     [self setTmpError:nil];
@@ -1081,11 +1078,6 @@ static NSInteger referenceCount;
 }
 -(void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error{
     if ([self connection]==connection) {
-        //清除错误文件
-        NSString *tempPath=[Utils pathForTemporary:tmpCache];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
-            [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
-        }
         //完成
         isFinish=YES;
         [self closeStream];
@@ -1099,26 +1091,32 @@ static NSInteger referenceCount;
 -(void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response{
     if ([self connection]==connection) {
         NSHTTPURLResponse *httpResponse=(NSHTTPURLResponse *)response;
-        if(httpResponse && [httpResponse respondsToSelector:@selector(allHeaderFields)]){
-            bytesTotal=bytesLoaded+[[[httpResponse allHeaderFields] objectForKey:@"Content-Length"] longLongValue];
+        if (httpResponse && [httpResponse statusCode]==200) {
+            if([httpResponse respondsToSelector:@selector(allHeaderFields)]){
+                bytesTotal=bytesLoaded+[[[httpResponse allHeaderFields] objectForKey:@"Content-Length"] longLongValue];
+            }
+        }else{
+            [self cancel];
         }
     }
 }
 -(void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data{
-    if ([self connection]==connection && tmpStream) {
+    if ([self connection]==connection) {
         const uint8_t *dataBytes=[data bytes];
         NSInteger dataLength=[data length];
         NSInteger bytesWrittenSoFar=0;
         NSInteger bytesWritten=0;
-        do {
-            bytesWritten=[tmpStream write:&dataBytes[bytesWrittenSoFar] maxLength:dataLength-bytesWrittenSoFar];
-            assert(bytesWritten!=0);
-            if (bytesWritten==-1) {
-                break;
-            } else {
-                bytesWrittenSoFar+=bytesWritten;
-            }
-        }while(bytesWrittenSoFar!=dataLength);
+        if (tmpStream) {
+            do {
+                bytesWritten=[tmpStream write:&dataBytes[bytesWrittenSoFar] maxLength:dataLength-bytesWrittenSoFar];
+                assert(bytesWritten!=0);
+                if (bytesWritten==-1) {
+                    break;
+                } else {
+                    bytesWrittenSoFar+=bytesWritten;
+                }
+            }while(bytesWrittenSoFar!=dataLength);
+        }
         //进度
         bytesLoaded+=bytesWrittenSoFar;
         if (tmpOnProgress) {
@@ -1128,9 +1126,9 @@ static NSInteger referenceCount;
 }
 -(void)connectionDidFinishLoading:(NSURLConnection *)connection{
     if ([self connection]==connection) {
-        NSString *tempPath=[Utils pathForTemporary:tmpCache];
+        NSString *tempPath=[Utils pathForCaches:tmpCache];
         if (NSLoaderCachePolicyNULL!=tmpPriority) {
-            NSString *filePath=[Utils pathForDocument:tmpCache];
+            NSString *filePath=[Utils pathForMaterial:tmpCache];
             if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                 [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
             }
@@ -1171,14 +1169,31 @@ static NSInteger referenceCount;
 //
 @implementation Utils
 //路径
-+(NSString*)pathForDocument:(NSString*)path{
-    return [NSDocuments() stringByAppendingPathComponent:path];
-}
 +(NSString*)pathForResource:(NSString*)path{
     return [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:path];
 }
 +(NSString*)pathForTemporary:(NSString*)path{
+    //Documents目录存贮的内容不会同步到icloud和itunes上，在空间不足时不会清空此目录
     return [NSTemporaryDirectory() stringByAppendingPathComponent:path];
+}
++(NSString*)pathForDocument:(NSString*)path{
+    //Documents目录存贮的内容会默认同步到icloud和itunes上，在空间不足时不会清空此目录
+    return [[NSHomeDirectory() stringByAppendingPathComponent:@"Documents"] stringByAppendingPathComponent:path];
+}
++(NSString*)pathForMaterial:(NSString*)path{
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        BOOL isDir=NO;
+        NSString *directory=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Material"];
+        if (NO==([[NSFileManager defaultManager] fileExistsAtPath:directory isDirectory:&isDir] && isDir)) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:NULL];
+        }
+    });
+    return [[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Material"] stringByAppendingPathComponent:path];
+}
++(NSString*)pathForCaches:(NSString*)path{
+    //Library/Caches目录存贮的内容会默认同步到icloud和itunes上，在空间不足时会清空此目录
+    return [[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"] stringByAppendingPathComponent:path];
 }
 +(NSString*)hashPath:(NSString*)path{
     NSString *extension=[path pathExtension];
@@ -1214,7 +1229,7 @@ static NSInteger referenceCount;
 +(id)openWithName:(NSString*)name{
     Class class = NSClassFromString(name);
     if (class) {
-        UIViewController *parentController = [[Utils rootController] topViewController];
+        UIViewController *parentController = [[Utils rootController] visibleViewController];
         if (parentController) {
             UIViewController *viewController = [[[class alloc] initWithNibName:nil bundle:nil] autorelease];
             [parentController addChildViewController:viewController];
@@ -1225,7 +1240,7 @@ static NSInteger referenceCount;
     return nil;
 }
 +(id)close{
-    UIViewController *parentController = [[Utils rootController] topViewController];
+    UIViewController *parentController = [[Utils rootController] visibleViewController];
     if (parentController) {
         UIViewController *viewController = [[parentController childViewControllers] lastObject];
         if (viewController) {
@@ -1278,7 +1293,7 @@ static NSInteger referenceCount;
         keyWindow=[[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
         [keyWindow setBackgroundColor:[UIColor blackColor]];
         [keyWindow makeKeyAndVisible];
-        NSLog(@"%@",NSDocuments());
+        NSLog(@"%@",NSHomeDirectory());
     });
     return keyWindow;
 }
