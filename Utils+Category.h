@@ -95,9 +95,8 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 
 //UIImage****************************************
 @interface UIImage(Utils_Category)
-+(id)imageWithDocument:(NSString*)path;
 +(id)imageWithResource:(NSString*)path;
-+(id)imageWithTemporary:(NSString*)path;
++(id)imageWithMaterial:(NSString*)path;
 -(id)imageWithTintColor:(UIColor*)tintColor;
 @end
 
@@ -120,7 +119,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 -(void)setURL:(NSURL*)URL preview:(UIImage*)preview onComplete:(void (^)(id target))onComplete;
 +(id)viewWithSource:(NSString*)source;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source;
-+(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent document:(NSString*)document;
++(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent material:(NSString*)material;
 @end
 
 //UILabel****************************************
@@ -202,9 +201,11 @@ typedef NSInteger NSLoaderCachePolicy;
 //***************************************************************************************************
 @interface Utils : NSObject
 //路径
-+(NSString*)pathForDocument:(NSString*)path;
 +(NSString*)pathForResource:(NSString*)path;
 +(NSString*)pathForTemporary:(NSString*)path;
++(NSString*)pathForDocument:(NSString*)path;
++(NSString*)pathForMaterial:(NSString*)path;
++(NSString*)pathForCaches:(NSString*)path;
 +(NSString*)hashPath:(NSString*)path;
 //顶层
 +(id)uuid;
