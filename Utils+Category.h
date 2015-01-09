@@ -49,7 +49,7 @@ NSAttributedString* parseAttribute(NSString *markup);
 
 //NSString****************************************
 NSString* MD5(NSString* string);
-NSString* NSDocuments(void);
+NSString* NSStringFromColor(UIColor* color);
 @interface NSString (Utils_Category)
 -(id)dateFromFormatter:(NSString*)format;
 -(NSString*)base64Encoded;
@@ -97,7 +97,7 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIImage(Utils_Category)
 +(id)imageWithResource:(NSString*)path;
 +(id)imageWithMaterial:(NSString*)path;
--(id)imageWithTintColor:(UIColor*)tintColor;
+-(UIImage*)imageWithTintColor:(UIColor*)tintColor;
 @end
 
 //UIView****************************************
