@@ -32,10 +32,20 @@ static NSString* sqliteTypeName(id type){
 //修正sqlite类型值
 static NSString* sqliteReviseValue(id type,id value){
     static NSString *sqlite_number=@"0";
-    static NSString *sqlite_string=@"\"\"";
+    static NSString *sqlite_string=@"\'\'";
     if (SQLITE_TEXT==[type intValue]) {
         if (value && value!=[NSNull null]) {
-            return [NSString stringWithFormat:@"\"%@\"",value];
+            /*NSString *string=[value stringByReplacingOccurrencesOfString:@"/" withString:@"//"];
+            string=[string stringByReplacingOccurrencesOfString:@"'" withString:@"''"];
+            string=[string stringByReplacingOccurrencesOfString:@"[" withString:@"/["];
+            string=[string stringByReplacingOccurrencesOfString:@"]" withString:@"/]"];
+            string=[string stringByReplacingOccurrencesOfString:@"%" withString:@"/%"];
+            string=[string stringByReplacingOccurrencesOfString:@"&" withString:@"/&"];
+            string=[string stringByReplacingOccurrencesOfString:@"_" withString:@"/_"];
+            string=[string stringByReplacingOccurrencesOfString:@"(" withString:@"/("];
+            string=[string stringByReplacingOccurrencesOfString:@")" withString:@"/)"];*/
+            NSString *string=[value stringByReplacingOccurrencesOfString:@"'" withString:@"''"];
+            return [NSString stringWithFormat:@"\'%@\'",string];
         }
         return sqlite_string;
     }
@@ -99,25 +109,25 @@ static int sqliteConverType(NSString *type){
 @implementation SQLTransaction
 @synthesize delegate;
 -(BOOL)end{
-    if (delegate) {
+    if ([delegate respondsToSelector:@selector(transactionEnd)]) {
         return [delegate transactionEnd];
     }
     return NO;
 }
 -(BOOL)begin{
-    if (delegate) {
+    if ([delegate respondsToSelector:@selector(transactionBegin)]) {
         return [delegate transactionBegin];
     }
     return NO;
 }
 -(BOOL)commit{
-    if (delegate) {
+    if ([delegate respondsToSelector:@selector(transactionCommit)]) {
         return [delegate transactionCommit];
     }
     return NO;
 }
 -(BOOL)rollback{
-    if (delegate) {
+    if ([delegate respondsToSelector:@selector(transactionRollback)]) {
         return [delegate transactionRollback];
     }
     return NO;
