@@ -1,23 +1,21 @@
 //
 //  NSObject+Category.h
-//  lib
+//  Board2D
 //
 //  Created by mac on 14-5-4.
-//  Copyright (c) 2014年 tinymedia.cn All rights reserved.
+//  Copyright (c) 2014年 e360. All rights reserved.
 //
 #import <UIKit/UIKit.h>
-#import <SystemConfiguration/SystemConfiguration.h>
-#import <CommonCrypto/CommonDigest.h>
-#import <CommonCrypto/CommonCrypto.h>
-#import <objc/runtime.h>
-#import <sys/utsname.h>
-#import <sys/socket.h>
-#import <arpa/inet.h>
-#import <ifaddrs.h>
-#import <netdb.h>
 
-//富文本
-NSAttributedString* parseAttribute(NSString *markup);
+#ifndef Utils_Category_h
+#define Utils_Category_h
+#define CGAutorelease(x) (__typeof(x))[NSMakeCollectable(x) autorelease]
+//CGPoint*****************************************
+CGFloat CGPointAngle(CGPoint a,CGPoint b);
+CGFloat CGPointDistance(CGPoint a,CGPoint b);
+CGFloat CGPointCross(CGPoint a,CGPoint b,CGPoint c);
+BOOL CGPointIntersect(CGPoint a,CGPoint b,CGPoint c,CGPoint d, CGPoint *o);
+#endif
 
 //NSGlobal****************************************
 @interface NSGlobal : NSObject;
@@ -90,13 +88,13 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 @interface UIDevice(Utils_Category)
 @property(nonatomic,readonly) UIDeviceNetwork network;
 @property(nonatomic,readonly) UIDeviceIdiom idiom;
-@property(nonatomic,retain) NSString *check;
+@property(nonatomic,copy) NSString *check;
 @end
 
 //UIImage****************************************
 @interface UIImage(Utils_Category)
-+(id)imageWithResource:(NSString*)path;
-+(id)imageWithMaterial:(NSString*)path;
++(id)imageWithSource:(NSString*)path;
++(id)imageWithLibrary:(NSString*)path;
 -(UIImage*)imageWithTintColor:(UIColor*)tintColor;
 @end
 
@@ -115,11 +113,12 @@ UIKIT_EXTERN NSString *const UIDeviceNetWorkDidChangeNotification;
 
 //UIImageView****************************************
 @interface UIImageView(Utils_Category)
-@property(nonatomic,retain) NSURL *URL;
--(void)setURL:(NSURL*)URL preview:(UIImage*)preview onComplete:(void (^)(id target))onComplete;
+@property(nonatomic,retain) NSString *URL;
+-(void)setURL:(NSString*)URLString onComplete:(void (^)(id target))onComplete;
+//
 +(id)viewWithSource:(NSString*)source;
 +(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent source:(NSString*)source;
-+(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent material:(NSString*)material;
++(id)viewWithFrame:(CGRect)frame parent:(UIView*)parent library:(NSString*)library;
 @end
 
 //UILabel****************************************
@@ -180,22 +179,41 @@ typedef NS_ENUM(NSInteger, UITransitionStyle) {
 
 //***************************************************************************************************
 enum{
-    NSLoaderCachePolicyNULL,
-    NSLoaderCachePolicyLoadData,
-    NSLoaderCachePolicyLocalData
+    NSURLLoaderCachePolicyNULL,
+    NSURLLoaderCachePolicyLoadData,
+    NSURLLoaderCachePolicyLocalData
 };
-typedef NSInteger NSLoaderCachePolicy;
-
-@interface NSLoader : NSObject
-+(id)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
--(void)request:(NSURL*)url post:(id)post cache:(NSString*)cache priority:(NSLoaderCachePolicy)priority progress:(void (^)(NSLoader *target))progress complete:(void (^)(NSLoader *target))complete;
+typedef NSInteger NSURLLoaderCachePolicy;
+//
+@interface NSURLRequest(Utils_Category)
++(NSURLRequest*)requestWithURL:(NSURL*)URL post:(id)post;
+@end
+//
+@interface NSURLLoader : NSOperation<NSStreamDelegate>{
+    BOOL finished;
+    NSURLLoaderCachePolicy priority;
+    //
+    NSData *bitData;
+    NSError *loadError;
+    NSString *fileName;
+    NSOutputStream *writeStream;
+}
++(NSOperationQueue*)queue;
++(NSURLLoader*)load:(NSURLRequest*)urlRequest priority:(NSURLLoaderCachePolicy)priority open:(void (^)(NSURLLoader *target))open progress:(void (^)(NSURLLoader *target))progress complete:(void (^)(NSURLLoader *target,NSError *error))complete;
+//
+-(NSURLLoader*)initWithPriority:(NSURLLoaderCachePolicy)urlPriority;
+-(void)load:(NSURLRequest*)urlRequest;
+-(void)close;
+//
+@property(nonatomic,retain) id identifier;
+@property(nonatomic,retain) NSURLRequest *request;
+@property(nonatomic,copy) void (^onOpen)(NSURLLoader *target);
+@property(nonatomic,copy) void (^onProgress)(NSURLLoader *target);
+@property(nonatomic,copy) void (^onComplete)(NSURLLoader *target ,NSError *error);
 @property(nonatomic,readonly) unsigned long long bytesLoaded;
 @property(nonatomic,readonly) unsigned long long bytesTotal;
 @property(nonatomic,readonly) NSURLConnection *connection;
-@property(nonatomic,readonly) NSError *error;
 @property(nonatomic,readonly) NSData *data;
-@property(nonatomic,readonly) NSURL *URL;
--(void)cancel;
 @end
 
 //***************************************************************************************************
@@ -204,7 +222,7 @@ typedef NSInteger NSLoaderCachePolicy;
 +(NSString*)pathForResource:(NSString*)path;
 +(NSString*)pathForTemporary:(NSString*)path;
 +(NSString*)pathForDocument:(NSString*)path;
-+(NSString*)pathForMaterial:(NSString*)path;
++(NSString*)pathForLibrary:(NSString*)path;
 +(NSString*)pathForCaches:(NSString*)path;
 +(NSString*)hashPath:(NSString*)path;
 //顶层
