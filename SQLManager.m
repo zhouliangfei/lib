@@ -155,6 +155,7 @@ static int sqliteConverType(NSString *type){
 -(id)init{
     self = [super init];
     if (self) {
+        threadLock=[[NSLock alloc] init];
         transaction=[[SQLTransaction alloc] init];
     }
     return self;
@@ -162,22 +163,27 @@ static int sqliteConverType(NSString *type){
 -(void)dealloc{
     [self close];
     [transaction release];
+    [threadLock release];
     [super dealloc];
 }
 -(BOOL)connect:(NSString *)path{
     if (NO==conned) {
+        [threadLock lock];
         if (SQLITE_OK==sqlite3_open([path UTF8String], &database)) {
             [transaction setDelegate:self];
             conned=YES;
         }
+        [threadLock unlock];
     }
     return conned;
 }
 -(void)close{
     if (conned) {
+        [threadLock lock];
         [transaction setDelegate:nil];
         sqlite3_close(database);
         database=NULL;
+        [threadLock unlock];
     }
     conned=NO;
 }
@@ -185,17 +191,22 @@ static int sqliteConverType(NSString *type){
     if (NO==conned){
         @throw [NSException exceptionWithName:@"query" reason:@"select a dataBase file" userInfo:nil];
     }
+    [threadLock lock];
     if(SQLITE_OK==sqlite3_exec(database, [sql UTF8String], 0, 0, NULL)){
+        [threadLock unlock];
         return YES;
-    } else{
-        @throw [NSException exceptionWithName:@"query" reason:sql userInfo:nil];
     }
+    //
+    [threadLock unlock];
+    @throw [NSException exceptionWithName:@"query" reason:sql userInfo:nil];
     return NO;
 }
 -(id)fetch:(NSString *)sql{
     if (NO==conned){
         @throw [NSException exceptionWithName:@"fetch" reason:@"select a dataBase file" userInfo:nil];
     }
+    //
+    [threadLock lock];
     sqlite3_stmt *statement=NULL;
     if (SQLITE_OK==sqlite3_prepare_v2(database, [sql UTF8String], -1, &statement, NULL)){
         int len=sqlite3_column_count(statement);
@@ -232,36 +243,55 @@ static int sqliteConverType(NSString *type){
                 [rows release];
             }
             sqlite3_finalize(statement);
-            return [result autorelease];
+            [threadLock unlock];
+            //
+            if (result.count>0) {
+                return [result autorelease];
+            }
+            [result release];
+            return nil;
         }
-    }else{
-        @throw [NSException exceptionWithName:@"fetch" reason:sql userInfo:nil];
     }
+    //
+    [threadLock unlock];
+    @throw [NSException exceptionWithName:@"fetch" reason:sql userInfo:nil];
     return nil;
 }
 //代理
 -(BOOL)transactionEnd{
+    [threadLock lock];
     if( SQLITE_OK==sqlite3_exec(database,"end transaction", 0, 0, NULL)){
+        [threadLock unlock];
         return YES;
     }
+    [threadLock unlock];
     return NO;
 }
 -(BOOL)transactionBegin{
+    [threadLock lock];
     if( SQLITE_OK==sqlite3_exec(database,"begin transaction", 0, 0, NULL)){
+        [threadLock unlock];
         return YES;
     }
+    [threadLock unlock];
     return NO;
 }
 -(BOOL)transactionCommit{
+    [threadLock lock];
     if( SQLITE_OK==sqlite3_exec(database,"commit transaction", 0, 0, NULL)){
+        [threadLock unlock];
         return YES;
     }
+    [threadLock unlock];
     return NO;
 }
 -(BOOL)transactionRollback{
+    [threadLock lock];
     if( SQLITE_OK==sqlite3_exec(database,"rollback transaction", 0, 0, NULL)){
+        [threadLock unlock];
         return YES;
     }
+    [threadLock unlock];
     return NO;
 }
 @end
