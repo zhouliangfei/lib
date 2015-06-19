@@ -21,7 +21,9 @@
 @end
 
 //********************************************
-@interface SQLManager : NSObject
+@interface SQLManager : NSObject{
+    NSLock *threadLock;
+}
 +(SQLManager*)shareInstance;
 //
 @property(nonatomic,readonly) SQLTransaction *transaction;
