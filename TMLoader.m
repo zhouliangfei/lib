@@ -17,14 +17,15 @@
 }
 @property(nonatomic, copy) NSString *filePath;
 @property(nonatomic, copy) NSString *tempPath;
-@property(nonatomic, strong) NSLock *locker;
 @property(nonatomic, strong) NSData *cacheData;
 @property(nonatomic, assign) NSInteger cacheType;
 @property(nonatomic, strong) NSURLRequest *currentRequest;
 @property(nonatomic, strong) NSURLSession *currentSession;
 @property(nonatomic, strong) NSURLSessionDataTask *currentTask;
+@property(nonatomic, strong) dispatch_semaphore_t semaphore;
+
 @property(nonatomic, weak) id<TMLoaderDelegate> delegate;
--(void)load:(NSURLRequest*)request delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache;
+-(void)load:(NSURLRequest*)request name:(NSString*)name delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache;
 @end
 //
 @implementation TMLoader
@@ -33,25 +34,36 @@
     static NSOperationQueue *instance = nil;
     dispatch_once(&onceToken, ^{
         instance = [[NSOperationQueue alloc] init];
-        [instance setMaxConcurrentOperationCount:3];
+        [instance setMaxConcurrentOperationCount:1];
     });
     return instance;
 }
-+(NSMutableArray*)waits{
-    static dispatch_once_t onceToken = 0;
-    static NSMutableArray *instance = nil;
-    dispatch_once(&onceToken, ^{
-        instance = [[NSMutableArray alloc] init];
-    });
-    return instance;
++(TMLoader*)load:(NSURLRequest*)request name:(NSString*)name delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache{
+    if (request) {
+        TMLoader *loader = [[TMLoader alloc] init];
+        [loader load:request name:name delegate:delegate cache:cache];
+        return loader;
+    }
+    return nil;
 }
 +(TMLoader*)load:(NSURLRequest*)request delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache{
     if (request) {
         TMLoader *loader = [[TMLoader alloc] init];
-        [loader load:request delegate:delegate cache:cache];
+        [loader load:request name:nil delegate:delegate cache:cache];
         return loader;
     }
     return nil;
+}
++(NSString*)hash:(NSString*)hash{
+    if (hash) {
+        NSString *src = [hash md5];
+        NSString *ext = [hash pathExtension];
+        if (ext && [ext length] > 0) {
+            return [src stringByAppendingPathExtension:ext];
+        }
+        return src;
+    }
+    return @"";
 }
 +(void)cancel{
     [[TMLoader queue] cancelAllOperations];
@@ -60,22 +72,22 @@
 -(void)main{
     if (NO == self.isCancelled) {
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-        [self setCurrentSession:[NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:[[NSOperationQueue alloc] init]]];
+        [self setCurrentSession:[NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil]];
         [self setCurrentTask:[self.currentSession dataTaskWithRequest:self.currentRequest]];
+        [self setSemaphore:dispatch_semaphore_create(0)];
         [self.currentTask resume];
         //
-        if ([self.delegate respondsToSelector:@selector(openLoader:)]) {
-            [self.delegate openLoader:self];
-        }
-        NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(timerHand:) userInfo:nil repeats:YES];
-        while(self.isCancelled == NO){
-            [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
-        }
-        [timer invalidate];
+        [self performSelectorOnMainThread:@selector(onOpen:) withObject:nil waitUntilDone:NO];
+        dispatch_semaphore_wait(self.semaphore, DISPATCH_TIME_FOREVER);
     }
 }
 -(void)cancel{
     [super cancel];
+    if (self.semaphore) {
+        dispatch_semaphore_signal(self.semaphore);
+        [self setSemaphore:nil];
+    }
+    //
     [self.currentTask cancel];
     [self.currentSession invalidateAndCancel];
     [self setCurrentSession:nil];
@@ -83,8 +95,8 @@
     [self setDelegate:nil];
 }
 //
--(void)timerHand:(NSTimer*)timer{
-    NSLog(@"000000");
+-(NSString *)file{
+    return self.filePath;
 }
 -(NSData *)data{
     if ([self cacheData]) {
@@ -95,7 +107,7 @@
 -(NSURLRequest*)request{
     return [self currentRequest];
 }
--(void)load:(NSURLRequest*)request delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache{
+-(void)load:(NSURLRequest*)request name:(NSString*)name delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache{
     if (request) {
         bytesTotal = 0;
         bytesLoaded = 0;
@@ -104,18 +116,19 @@
         [self setDelegate:delegate];
         [self setCurrentRequest:request];
         //
-        NSString *hashName = [self hashRequest:request];
-        [self setFilePath:[NSString libraryAppend:hashName]];
+        if (name == nil) {
+            name = [TMLoader hash:request.URL.absoluteString];
+        }
+        //
+        [self setFilePath:[NSString libraryAppend:name]];
         if (self.cacheType==2 && [[NSFileManager defaultManager] fileExistsAtPath:self.filePath]) {
             if (self.delegate) {
                 bytesTotal = bytesLoaded = [[[NSFileManager defaultManager] attributesOfItemAtPath:self.filePath error:nil] fileSize];
-                if ([self.delegate respondsToSelector:@selector(completeLoader:error:)]) {
-                    [self.delegate completeLoader:self error:nil];
-                }
+                [self performSelectorOnMainThread:@selector(onComplete:) withObject:nil waitUntilDone:NO];
             }
             [self cancel];
         }else{
-            [self setTempPath:[NSString temporaryAppend:hashName]];
+            [self setTempPath:[NSString temporaryAppend:name]];
             if ([[NSFileManager defaultManager] fileExistsAtPath:self.tempPath]) {
                 if ([self.currentRequest respondsToSelector:@selector(addValue:forHTTPHeaderField:)]) {
                     bytesLoaded = [[[NSFileManager defaultManager] attributesOfItemAtPath:self.tempPath error:nil] fileSize];
@@ -129,42 +142,16 @@
             }
             //
             if (self.delegate) {
-                if ([[TMLoader queue] maxConcurrentOperationCount] != 1) {
-                    @synchronized([TMLoader waits]) {
-                        for (TMLoader *temp in [[TMLoader queue] operations]) {
-                            if ([temp.request.URL isEqual:self.request.URL]) {
-                                [[TMLoader waits] addObject:self];
-                                return;
-                            }
-                        }
-                    }
-                }
-                @synchronized([TMLoader queue]) {
-                    [[TMLoader queue] addOperation:self];
-                }
+                [[TMLoader queue] addOperation:self];
             }else{
                 [self start];
             }
         }
     }
 }
--(NSString*)hashRequest:(NSURLRequest*)request{
-    NSString *string = [[request URL] absoluteString];
-    if (string) {
-        NSString *src = [string md5];
-        NSString *ext = [string pathExtension];
-        if (ext && [ext length] > 0) {
-            return [src stringByAppendingPathExtension:ext];
-        }
-        return src;
-    }
-    return @"";
-}
 //
 -(void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didSendBodyData:(int64_t)bytesSent totalBytesSent:(int64_t)totalBytesSent totalBytesExpectedToSend:(int64_t)totalBytesExpectedToSend{
-    if ([self.delegate respondsToSelector:@selector(progressLoader:bytesLoaded:bytesTotal:)]) {
-        [self.delegate progressLoader:self bytesLoaded:totalBytesSent bytesTotal:totalBytesExpectedToSend];
-    }
+    [self performSelectorOnMainThread:@selector(onProgress:) withObject:nil waitUntilDone:NO];
 }
 -(void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data{
     NSHTTPURLResponse *response = (NSHTTPURLResponse*)dataTask.response;
@@ -187,10 +174,10 @@
             [fileHandle closeFile];
             //
             bytesLoaded += data.length;
-            if ([self.delegate respondsToSelector:@selector(progressLoader:bytesLoaded:bytesTotal:)]) {
-                [self.delegate progressLoader:self bytesLoaded:bytesLoaded bytesTotal:bytesTotal];
-            }
+            [self performSelectorOnMainThread:@selector(onProgress:) withObject:nil waitUntilDone:NO];
         }
+    }else{
+        [self cancel];
     }
 }
 -(void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(nullable NSError *)error{
@@ -208,28 +195,24 @@
                 [[NSFileManager defaultManager] moveItemAtPath:tempPath toPath:filePath error:nil];
             }
         }
-    }else{
-        [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
     }
+    [self performSelectorOnMainThread:@selector(onComplete:) withObject:error waitUntilDone:NO];
+    [self cancel];
+}
+//
+-(void)onOpen:(id)error{
+    if ([self.delegate respondsToSelector:@selector(openLoader:)]) {
+        [self.delegate openLoader:self];
+    }
+}
+-(void)onProgress:(id)error{
+    if ([self.delegate respondsToSelector:@selector(progressLoader:bytesLoaded:bytesTotal:)]) {
+        [self.delegate progressLoader:self bytesLoaded:bytesLoaded bytesTotal:bytesTotal];
+    }
+}
+-(void)onComplete:(id)error{
     if ([self.delegate respondsToSelector:@selector(completeLoader:error:)]) {
         [self.delegate completeLoader:self error:error];
-    }
-    [self cancel];
-    //
-    @synchronized([TMLoader waits]) {
-        for (TMLoader *temp in [[TMLoader waits] reverseObjectEnumerator]) {
-            if ([temp isCancelled]) {
-                [[TMLoader waits] removeObject:temp];
-            }
-        }
-    }
-    @synchronized([TMLoader queue]) {
-        for (TMLoader *temp in [TMLoader waits]) {
-            if ([temp.request.URL isEqual:self.request.URL]) {
-                [[TMLoader queue] addOperation:temp];
-                break;
-            }
-        }
     }
 }
 @end
