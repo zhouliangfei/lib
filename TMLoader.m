@@ -92,7 +92,6 @@
     [self.currentSession invalidateAndCancel];
     [self setCurrentSession:nil];
     [self setCurrentTask:nil];
-    [self setDelegate:nil];
 }
 //
 -(NSString *)file{
