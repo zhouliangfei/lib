@@ -140,7 +140,6 @@
             }else{
                 [[NSFileManager defaultManager] createFileAtPath:self.tempPath contents:nil attributes:nil];
             }
-            //
             if (self.delegate) {
                 [[TMLoader queue] addOperation:self];
             }else{
