@@ -147,34 +147,6 @@ static int sqliteConverType(NSString *type){
 @property(assign, nonatomic) BOOL conned;
 @end
 @implementation TMSQLite
-/*static int callback(void* argument, int count, char** value, char** name){
-    NSMutableArray *result = (__bridge id)argument;
-    NSMutableDictionary *rows = [NSMutableDictionary dictionary];
-    for (int i = 0; i < count; i++){
-        NSString *name = [NSString stringWithUTF8String:sqlite3_column_name(statement, i)];
-        switch(sqlite3_column_type(statement, i)){
-            case SQLITE_BLOB:
-                [rows setValue:[NSData dataWithBytes:sqlite3_column_blob(statement, i) length:sqlite3_column_bytes(statement, i)] forKey:name];
-                break;
-            case SQLITE_TEXT:
-                [rows setValue:[NSString stringWithUTF8String:(char *)sqlite3_column_text(statement, i)] forKey:name];
-                break;
-            case SQLITE_FLOAT:
-                [rows setValue:[NSNumber numberWithFloat:sqlite3_column_double(statement, i)] forKey:name];
-                break;
-            case SQLITE_INTEGER:
-                [rows setValue:[NSNumber numberWithInt:sqlite3_column_int(statement, i)] forKey:name];
-                break;
-            case SQLITE_NULL:
-                [rows setValue:[NSNull null] forKey:name];
-                break;
-            default:
-                break;
-        }
-    }
-    [result addObject:rows];
-    return 0;
-}*/
 +(TMSQLite*)shareInstance{
     static TMSQLite *instance = nil;
     static dispatch_once_t onceToken = 0;
@@ -204,9 +176,9 @@ static int sqliteConverType(NSString *type){
 //
 -(BOOL)connect:(NSString*)path{
     if (self.conned) {
-        return self.conned;
+        return YES;
     }
-    if (SQLITE_OK == sqlite3_open([path UTF8String], &database)) {
+    if (SQLITE_OK == sqlite3_open_v2([path UTF8String], &database, SQLITE_CONFIG_MULTITHREAD, NULL)) {
         [self.transaction setDelegate:self];
         [self setConned:YES];
         return YES;
@@ -214,67 +186,70 @@ static int sqliteConverType(NSString *type){
     return NO;
 }
 -(id)query:(NSString *)sql{
-    @synchronized(self) {
-        if (self.conned){
-            sqlite3_stmt *statement = NULL;
-            if (SQLITE_OK == sqlite3_prepare_v2(database, [sql UTF8String], -1, &statement, NULL)){
-                int step = sqlite3_step(statement);
-                if (step == SQLITE_DONE) {
-                    //没有查到或增删改
-                    //NSLog(@"sqlite3_data_count=%d",sqlite3_data_count(statement));
-                    sqlite3_finalize(statement);
-                    return [NSMutableArray array];
-                }
-                if (step == SQLITE_ROW) {
-                    //查
-                    NSMutableArray *result = [NSMutableArray array];
-                    int len = sqlite3_column_count(statement);
-                    while (step == SQLITE_ROW){
-                        NSMutableDictionary *rows = [NSMutableDictionary dictionary];
-                        for (uint i = 0; i < len; i++){
-                            NSString *name = [NSString stringWithUTF8String:sqlite3_column_name(statement, i)];
-                            switch(sqlite3_column_type(statement, i)){
-                                case SQLITE_BLOB:
-                                    [rows setValue:[NSData dataWithBytes:sqlite3_column_blob(statement, i) length:sqlite3_column_bytes(statement, i)] forKey:name];
-                                    break;
-                                case SQLITE_TEXT:
-                                    [rows setValue:[NSString stringWithUTF8String:(char *)sqlite3_column_text(statement, i)] forKey:name];
-                                    break;
-                                case SQLITE_FLOAT:
-                                    [rows setValue:[NSNumber numberWithFloat:sqlite3_column_double(statement, i)] forKey:name];
-                                    break;
-                                case SQLITE_INTEGER:
-                                    [rows setValue:[NSNumber numberWithInt:sqlite3_column_int(statement, i)] forKey:name];
-                                    break;
-                                case SQLITE_NULL:
-                                    [rows setValue:[NSNull null] forKey:name];
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                        [result addObject:rows];
-                        //
-                        step = sqlite3_step(statement);
-                    }
-                    sqlite3_finalize(statement);
-                    return result;
-                }
-            }else{
+    if (self.conned){
+        sqlite3_stmt *statement = NULL;
+        if (SQLITE_OK == sqlite3_prepare_v2(database, [sql UTF8String], -1, &statement, NULL)){
+            int step = sqlite3_step(statement);
+            if (step == SQLITE_DONE) {
+                int readonly = sqlite3_stmt_readonly(statement);
                 sqlite3_finalize(statement);
-                //@throw [NSException exceptionWithName:[NSString stringWithFormat:@"%s",sqlite3_errmsg(database)] reason:sql userInfo:nil];
+                if (readonly == 0) {
+                    if (sqlite3_changes(database) > 0) {
+                        return [NSNumber numberWithBool:YES];
+                    }
+                    return [NSNumber numberWithBool:NO];
+                }
+                return nil;
             }
+            if (step == SQLITE_ROW) {
+                int length = sqlite3_column_count(statement);
+                NSMutableArray *result = [NSMutableArray array];
+                while (step == SQLITE_ROW){
+                    NSMutableDictionary *rows = [NSMutableDictionary dictionary];
+                    for (uint i = 0; i < length; i++){
+                        NSString *name = [NSString stringWithUTF8String:sqlite3_column_name(statement, i)];
+                        switch(sqlite3_column_type(statement, i)){
+                            case SQLITE_BLOB:
+                                [rows setValue:[NSData dataWithBytes:sqlite3_column_blob(statement, i) length:sqlite3_column_bytes(statement, i)] forKey:name];
+                                break;
+                            case SQLITE_TEXT:
+                                [rows setValue:[NSString stringWithUTF8String:(char *)sqlite3_column_text(statement, i)] forKey:name];
+                                break;
+                            case SQLITE_FLOAT:
+                                [rows setValue:[NSNumber numberWithFloat:sqlite3_column_double(statement, i)] forKey:name];
+                                break;
+                            case SQLITE_INTEGER:
+                                [rows setValue:[NSNumber numberWithInt:sqlite3_column_int(statement, i)] forKey:name];
+                                break;
+                            case SQLITE_NULL:
+                                [rows setValue:[NSNull null] forKey:name];
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    [result addObject:rows];
+                    //
+                    step = sqlite3_step(statement);
+                }
+                sqlite3_finalize(statement);
+                return result;
+            }
+        }else{
+            sqlite3_finalize(statement);
+            @throw [NSException exceptionWithName:[NSString stringWithFormat:@"%s",sqlite3_errmsg(database)] reason:sql userInfo:nil];
         }
-        return nil;
     }
+    return nil;
 }
--(void)close{
-    if (self.conned) {
+-(BOOL)close{
+    if (self.conned && SQLITE_OK == sqlite3_close_v2(database)) {
         [self.transaction setDelegate:nil];
-        sqlite3_close(database);
+        [self setConned:NO];
         database = NULL;
+        return YES;
     }
-    [self setConned:NO];
+    return NO;
 }
 //
 -(BOOL)transactionEnd{
