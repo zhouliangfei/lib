@@ -72,26 +72,35 @@
 -(void)main{
     if (NO == self.isCancelled) {
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-        [self setCurrentSession:[NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil]];
+        [self setCurrentSession:[NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:self.delegate ? [NSOperationQueue mainQueue] : nil]];
         [self setCurrentTask:[self.currentSession dataTaskWithRequest:self.currentRequest]];
-        [self setSemaphore:dispatch_semaphore_create(0)];
-        [self.currentTask resume];
         //
-        [self performSelectorOnMainThread:@selector(onOpen:) withObject:nil waitUntilDone:NO];
-        dispatch_semaphore_wait(self.semaphore, DISPATCH_TIME_FOREVER);
+        [self onOpen:nil];
+        [self semaphoreMake];
+        [self.currentTask resume];
+        [self semaphoreWait];
     }
 }
 -(void)cancel{
     [super cancel];
-    if (self.semaphore) {
-        dispatch_semaphore_signal(self.semaphore);
-        [self setSemaphore:nil];
-    }
-    //
+    [self semaphoreSignal];
     [self.currentTask cancel];
     [self.currentSession invalidateAndCancel];
     [self setCurrentSession:nil];
     [self setCurrentTask:nil];
+}
+//信号
+-(void)semaphoreSignal{
+    if (self.semaphore) {
+        dispatch_semaphore_signal(self.semaphore);
+        [self setSemaphore:nil];
+    }
+}
+-(void)semaphoreMake{
+    [self setSemaphore:dispatch_semaphore_create(0)];
+}
+-(void)semaphoreWait{
+    dispatch_semaphore_wait(self.semaphore, DISPATCH_TIME_FOREVER);
 }
 //
 -(NSString *)file{
@@ -123,7 +132,7 @@
         if (self.cacheType==2 && [[NSFileManager defaultManager] fileExistsAtPath:self.filePath]) {
             if (self.delegate) {
                 bytesTotal = bytesLoaded = [[[NSFileManager defaultManager] attributesOfItemAtPath:self.filePath error:nil] fileSize];
-                [self performSelectorOnMainThread:@selector(onComplete:) withObject:nil waitUntilDone:NO];
+                [self onComplete:nil];
             }
             [self cancel];
         }else{
@@ -149,7 +158,7 @@
 }
 //
 -(void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didSendBodyData:(int64_t)bytesSent totalBytesSent:(int64_t)totalBytesSent totalBytesExpectedToSend:(int64_t)totalBytesExpectedToSend{
-    [self performSelectorOnMainThread:@selector(onProgress:) withObject:nil waitUntilDone:NO];
+    [self onProgress:nil];
 }
 -(void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data{
     NSHTTPURLResponse *response = (NSHTTPURLResponse*)dataTask.response;
@@ -172,7 +181,7 @@
             [fileHandle closeFile];
             //
             bytesLoaded += data.length;
-            [self performSelectorOnMainThread:@selector(onProgress:) withObject:nil waitUntilDone:NO];
+            [self onProgress:nil];
         }
     }else{
         [self cancel];
@@ -194,22 +203,22 @@
             }
         }
     }
-    [self performSelectorOnMainThread:@selector(onComplete:) withObject:error waitUntilDone:NO];
+    [self onComplete:error];
     [self cancel];
 }
 //
 -(void)onOpen:(id)error{
-    if ([self.delegate respondsToSelector:@selector(openLoader:)]) {
+    if (self.delegate && [self.delegate respondsToSelector:@selector(openLoader:)]) {
         [self.delegate openLoader:self];
     }
 }
 -(void)onProgress:(id)error{
-    if ([self.delegate respondsToSelector:@selector(progressLoader:bytesLoaded:bytesTotal:)]) {
+    if (self.delegate && [self.delegate respondsToSelector:@selector(progressLoader:bytesLoaded:bytesTotal:)]) {
         [self.delegate progressLoader:self bytesLoaded:bytesLoaded bytesTotal:bytesTotal];
     }
 }
 -(void)onComplete:(id)error{
-    if ([self.delegate respondsToSelector:@selector(completeLoader:error:)]) {
+    if (self.delegate && [self.delegate respondsToSelector:@selector(completeLoader:error:)]) {
         [self.delegate completeLoader:self error:error];
     }
 }
