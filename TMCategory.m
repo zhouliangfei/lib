@@ -8,7 +8,7 @@
 
 #import "TMCategory.h"
 #import <SystemConfiguration/SystemConfiguration.h>
-#import <CommonCrypto/CommonDigest.h>
+#import <CommonCrypto/CommonCrypto.h>
 #import <objc/runtime.h>
 #import <sys/utsname.h>
 #import <sys/socket.h>
@@ -19,6 +19,16 @@
 #pragma mark-
 #pragma mark NSObject
 @implementation NSObject(Utils_Category);
+static const void *objectPrototype = "object.prototype";
+@dynamic prototype;
+-(NSMutableDictionary *)prototype{
+    NSMutableDictionary *dictionary = objc_getAssociatedObject(self, objectPrototype);
+    if (dictionary == nil) {
+        dictionary = [NSMutableDictionary dictionary];
+        objc_setAssociatedObject(self, objectPrototype, dictionary, OBJC_ASSOCIATION_RETAIN);
+    }
+    return dictionary;
+}
 -(id)duplicate{
     NSData *archive = [NSKeyedArchiver archivedDataWithRootObject:self];
     return [NSKeyedUnarchiver unarchiveObjectWithData:archive];
@@ -117,35 +127,111 @@
     CFRelease(cs);
     return ns;
 }
-//
+//路径混淆
+-(id)pathConfusion{
+    if (self.length > 0) {
+        NSString *src = [self md5];
+        NSString *ext = [self pathExtension];
+        if (ext && [ext length] > 0) {
+            return [src stringByAppendingPathExtension:ext];
+        }
+        return src;
+    }
+    return @"";
+}
 -(id)dateFromFormatter:(NSString*)format{
-    if (format && [format isKindOfClass:[NSString class]]) {
-        [[NSDateFormatter shareInstance] setDateFormat:format];
-        return [[NSDateFormatter shareInstance] dateFromString:self];
+    if (self.length > 0) {
+        if (format && [format isKindOfClass:[NSString class]]) {
+            [[NSDateFormatter shareInstance] setDateFormat:format];
+            return [[NSDateFormatter shareInstance] dateFromString:self];
+        }
     }
     return nil;
 }
+//AES256加密
+-(id)aes256EncodedWithKey:(NSString *)key{
+    if (self.length > 0) {
+        char keyPtr[kCCKeySizeAES256 + 1];
+        bzero(keyPtr, sizeof(keyPtr));
+        [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+        //
+        NSData *data = [self dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
+        NSUInteger dataLength = [data length];
+        size_t bufferSize = dataLength + kCCBlockSizeAES128;
+        void *buffer = malloc(bufferSize);
+        size_t numBytesEncrypted = 0;
+        CCCryptorStatus cryptStatus = CCCrypt(kCCEncrypt, kCCAlgorithmAES128,
+                                              kCCOptionPKCS7Padding | kCCOptionECBMode,
+                                              keyPtr, kCCBlockSizeAES128,
+                                              NULL,
+                                              [data bytes], dataLength,
+                                              buffer, bufferSize,
+                                              &numBytesEncrypted);
+        if (cryptStatus == kCCSuccess) {
+            NSData *temp = [NSData dataWithBytesNoCopy:buffer length:numBytesEncrypted];
+            return [[NSString alloc] initWithData:temp encoding:NSUTF8StringEncoding];
+        }
+        free(buffer);
+    }
+    return @"";
+}
+//AES256解码
+-(id)aes256DecodedWithKey:(NSString *)key{
+    if (self.length > 0) {
+        char keyPtr[kCCKeySizeAES256 + 1];
+        bzero(keyPtr, sizeof(keyPtr));
+        [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+        //
+        NSData *data = [self dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
+        NSUInteger dataLength = [data length];
+        size_t bufferSize = dataLength + kCCBlockSizeAES128;
+        void *buffer = malloc(bufferSize);
+        size_t numBytesDecrypted = 0;
+        CCCryptorStatus cryptStatus = CCCrypt(kCCDecrypt, kCCAlgorithmAES128,
+                                              kCCOptionPKCS7Padding | kCCOptionECBMode,
+                                              keyPtr, kCCBlockSizeAES128,
+                                              NULL,
+                                              [data bytes], dataLength,
+                                              buffer, bufferSize,
+                                              &numBytesDecrypted);
+        if (cryptStatus == kCCSuccess) {
+            NSData *temp = [NSData dataWithBytesNoCopy:buffer length:numBytesDecrypted];
+            return [[NSString alloc] initWithData:temp encoding:NSUTF8StringEncoding];
+        }
+        free(buffer);
+    }
+    return @"";
+}
 //base64解码
 -(id)base64Encoded{
-    NSData *nd = [self dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
-    return [nd base64EncodedStringWithOptions:NSDataBase64EncodingEndLineWithLineFeed];
+    if (self.length > 0) {
+        NSData *nd = [self dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
+        return [nd base64EncodedStringWithOptions:NSDataBase64EncodingEndLineWithLineFeed];
+    }
+    return @"";
 }
 //base64解码
 -(id)base64Decoded{
-    NSData *nd = [[NSData alloc] initWithBase64EncodedString:self options:NSDataBase64DecodingIgnoreUnknownCharacters];
-    return [[NSString alloc] initWithData:nd encoding:NSUTF8StringEncoding];
+    if (self.length > 0) {
+        NSData *nd = [[NSData alloc] initWithBase64EncodedString:self options:NSDataBase64DecodingIgnoreUnknownCharacters];
+        return [[NSString alloc] initWithData:nd encoding:NSUTF8StringEncoding];
+    }
+    return @"";
 }
 //md5加密
 -(id)md5{
-    const char *cc = [self UTF8String];
-    unsigned char result[CC_MD5_DIGEST_LENGTH];
-    CC_MD5(cc, (CC_LONG)strlen(cc), result);
-    
-    NSMutableString *ms = [NSMutableString stringWithCapacity:CC_MD5_DIGEST_LENGTH];
-    for(uint i = 0; i < CC_MD5_DIGEST_LENGTH; i++){
-        [ms appendFormat:@"%02x",result[i]];
+    if (self.length > 0) {
+        const char *cc = [self UTF8String];
+        unsigned char result[CC_MD5_DIGEST_LENGTH];
+        CC_MD5(cc, (CC_LONG)strlen(cc), result);
+        
+        NSMutableString *ms = [NSMutableString stringWithCapacity:CC_MD5_DIGEST_LENGTH];
+        for(uint i = 0; i < CC_MD5_DIGEST_LENGTH; i++){
+            [ms appendFormat:@"%02x",result[i]];
+        }
+        return [ms lowercaseString];
     }
-    return [ms lowercaseString];
+    return @"";
 }
 @end
 
@@ -281,9 +367,21 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 #pragma mark-
 #pragma mark UIImage
 @implementation UIImage(Utils_Category)
--(UIImage*)insert:(CGSize)size{
+-(UIImage*)blendWithColor:(UIColor*)color{
+    CGRect rect = CGRectMake(0, 0, self.size.width, self.size.height);
+    UIGraphicsBeginImageContextWithOptions(rect.size, NO, self.scale);
+    CGContextSetFillColorWithColor(UIGraphicsGetCurrentContext(), color.CGColor);
+    //
+    UIRectFill(rect);
+    [self drawInRect:rect blendMode:kCGBlendModeOverlay alpha:1.0f];
+    [self drawInRect:rect blendMode:kCGBlendModeDestinationIn alpha:1.0f];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
+-(UIImage*)resize:(CGSize)size{
     CGFloat scale = MIN(size.width / self.size.width, size.height / self.size.height);
-    if (scale > 1.0) {
+    if (scale != 1.0) {
         size = CGSizeMake(self.size.width * scale, self.size.height * scale);
         //
         UIGraphicsBeginImageContext(size);
@@ -300,74 +398,108 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 #pragma mark-
 #pragma mark UIImageView
 @implementation UIImageView (TMLoader)
-static const void *ImageViewIndicator = "imageView.indicator";
-static const void *ImageViewTask = "imageView.task";
-static const void *ImageViewSrc = "imageView.src";
-@dynamic src;
--(void)setSrc:(NSString *)src{
-    //@synchronized(self) {
-        if (self.image==nil || [src isEqualToString:self.src] == NO) {
-            objc_setAssociatedObject(self, ImageViewSrc, src, OBJC_ASSOCIATION_COPY_NONATOMIC);
-            //
-            NSString *name = [self hashPath:src];
-            NSString *path = [NSString libraryAppend:name];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
-                UIImage *image = [UIImage imageWithContentsOfFile:path];
-                [self setImage:image];
-            }else{
-                NSURL *url = [NSURL URLWithString:src];
-                if (url) {
-                    [[self task] cancel];
-                    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
-                        if (nil == error) {
-                            [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL fileURLWithPath:path] error:nil];
-                        }
-                        UIImage *image = [UIImage imageWithContentsOfFile:path];
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            [[self indicator] removeFromSuperview];
-                            [[self indicator] stopAnimating];
-                            [self setImage:image];
-                        });
-                    }];
-                    [[self indicator] setCenter:CGPointMake(CGRectGetMidX(self.bounds), CGRectGetMidY(self.bounds))];
-                    [self addSubview:[self indicator]];
-                    [[self indicator] startAnimating];
-                    [self setTask:task];
-                    [self setImage:nil];
-                    [task resume];
-                }
+static NSString *imageViewIndicator = @"imageView.indicator";
+static NSString *imageViewSource = @"imageView.source";
+static NSString *imageViewBlend = @"imageView.blend";
+static NSString *imageViewSrc = @"imageView.src";
+@dynamic blend, src;
++ (void)load {
+    Method originalSetBounds = class_getInstanceMethod(self, @selector(setBounds:));
+    Method swizzledSetBounds = class_getInstanceMethod(self, @selector(setBoundsSwizzled:));
+    method_exchangeImplementations(originalSetBounds, swizzledSetBounds);
+    //
+    Method originalSetImage = class_getInstanceMethod(self, @selector(setImage:));
+    Method swizzledSetImage = class_getInstanceMethod(self, @selector(setImageSwizzled:));
+    method_exchangeImplementations(originalSetImage, swizzledSetImage);
+    //
+    Method originalGetImage = class_getInstanceMethod(self, @selector(image));
+    Method swizzledGetImage = class_getInstanceMethod(self, @selector(imageSwizzled));
+    method_exchangeImplementations(originalGetImage, swizzledGetImage);
+}
+-(void)setBoundsSwizzled:(CGRect)bounds{
+    [self setBoundsSwizzled:bounds];
+    UIActivityIndicatorView *indicator = [self.prototype valueForKey:imageViewIndicator];
+    if (indicator) {
+        [indicator setCenter:CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds))];
+    }
+}
+-(void)setImageSwizzled:(UIImage*)image{
+    [self.prototype setValue:image forKey:imageViewSource];
+    if (self.blend) {
+        [self setImageSwizzled:[image blendWithColor:self.blend]];
+    }else{
+        [self setImageSwizzled:image];
+    }
+}
+-(UIImage*)imageSwizzled{
+    return [self.prototype valueForKey:imageViewSource];
+}
+-(void)setBlend:(UIColor *)blend{
+    [self.prototype setValue:blend forKey:imageViewBlend];
+    [self setImage:self.image];
+}
+-(UIColor *)blend{
+    return [self.prototype valueForKey:imageViewBlend];
+}
+//
+-(void)load:(NSString*)file base:(NSString*)base{
+    [self.prototype setValue:file forKey:imageViewSrc];
+    //本地相对于library目录，网络相对于base目录
+    NSString *path = [NSString libraryAppend:file];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        UIImage *image = [UIImage imageWithContentsOfFile:path];
+        [self setImage:image];
+        return;
+    }
+    //
+    if (file) {
+        if (base == nil) base = @"";
+        NSString *src = [base stringByAppendingString:file];
+        NSURL *url = [NSURL URLWithString:src];
+        if (url) {
+            UIActivityIndicatorView *indicator = [self.prototype valueForKey:imageViewIndicator];
+            if (indicator == nil) {
+                indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+                [self.prototype setValue:indicator forKey:imageViewIndicator];
+                [self setBounds:self.bounds];
+                [self addSubview:indicator];
+                [indicator startAnimating];
             }
+            //
+            __weak UIImageView *this = self;
+            NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+                if (nil == error) {
+                    NSString *dir = [file stringByDeletingLastPathComponent];
+                    if (NO == [[NSFileManager defaultManager] fileExistsAtPath:dir]) {
+                        [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+                    }
+                    [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL fileURLWithPath:path] error:nil];
+                }
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+                        UIImage *image = [UIImage imageWithContentsOfFile:path];
+                        [self setImage:image];
+                    }
+                    [this.prototype setValue:nil forKey:imageViewIndicator];
+                    [indicator removeFromSuperview];
+                    [indicator stopAnimating];
+                });
+            }];
+            //
+            NSString *imageViewTask = @"imageView.task";
+            [[self.prototype valueForKey:imageViewTask] cancel];
+            [self.prototype setValue:task forKey:imageViewTask];
+            [self setImage:nil];
+            [task resume];
         }
-    //}
+    }
+}
+-(void)setSrc:(NSString *)src{
+    if (self.image == nil || [src isEqualToString:self.src] == NO) {
+        [self load:src base:nil];
+    }
 }
 -(NSString *)src{
-    return objc_getAssociatedObject(self, ImageViewSrc);
-}
-//
--(void)setTask:(NSURLSessionDownloadTask*)task{
-    objc_setAssociatedObject(self, ImageViewTask, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
--(NSURLSessionDownloadTask*)task{
-    return objc_getAssociatedObject(self, ImageViewTask);
-}
-//
--(UIActivityIndicatorView*)indicator{
-    UIActivityIndicatorView *temp = objc_getAssociatedObject(self, ImageViewIndicator);
-    if (temp == nil) {
-        temp = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
-        objc_setAssociatedObject(self, ImageViewIndicator, temp, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    return temp;
-}
--(NSString*)hashPath:(NSString*)val{
-    if (val) {
-        NSString *src = [val md5];
-        NSString *ext = [val pathExtension];
-        if (ext && [ext length] > 0) {
-            return [src stringByAppendingPathExtension:ext];
-        }
-        return src;
-    }
-    return @"";
+    return [self.prototype valueForKey:imageViewSrc];
 }
 @end
