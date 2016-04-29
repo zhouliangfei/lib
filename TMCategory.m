@@ -84,7 +84,7 @@ static const void *objectPrototype = "object.prototype";
     unsigned int unitFlags = NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond | NSCalendarUnitNanosecond | NSCalendarUnitWeekday;
     return [[NSCalendar currentCalendar] components:unitFlags fromDate:self];
 }
--(id)stringFromFormatter:(NSString*)format{
+-(id)toString:(NSString*)format{
     if (format && [format isKindOfClass:[NSString class]]) {
         [[NSDateFormatter shareInstance] setDateFormat:format];
         return [[NSDateFormatter shareInstance] stringFromDate:self];
@@ -139,7 +139,7 @@ static const void *objectPrototype = "object.prototype";
     }
     return nil;
 }
--(id)dateFromFormatter:(NSString*)format{
+-(id)toDate:(NSString*)format{
     if (self.length > 0) {
         if (format && [format isKindOfClass:[NSString class]]) {
             [[NSDateFormatter shareInstance] setDateFormat:format];
@@ -397,7 +397,7 @@ static void detectNetworkCallback(SCNetworkReachabilityRef target, SCNetworkReac
 
 #pragma mark-
 #pragma mark UIImageView
-@implementation UIImageView (TMLoader)
+@implementation UIImageView (Utils_Category)
 static NSString *imageViewIndicator = @"imageView.indicator";
 static NSString *imageViewSource = @"imageView.source";
 static NSString *imageViewBlend = @"imageView.blend";
