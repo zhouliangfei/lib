@@ -13,8 +13,11 @@
 @protocol TMLoaderDelegate;
 @interface TMLoader : NSOperation<NSURLSessionDataDelegate>
 @property(nonatomic, readonly) NSURLRequest *request;
+@property(nonatomic, readonly) NSString *file;
 @property(nonatomic, readonly) NSData *data;
-//request,[nil=同步],[0=不缓存,1=网络优先，2=本地优先]
+//request:[nil=同步,其他异步]
+//cache:[0=不缓存,1=网络优先，2=本地优先]
++(TMLoader*)load:(NSURLRequest*)request name:(NSString*)name delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache;
 +(TMLoader*)load:(NSURLRequest*)request delegate:(id<TMLoaderDelegate>)delegate cache:(NSInteger)cache;
 +(void)cancel;
 @end
