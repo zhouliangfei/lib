@@ -10,31 +10,48 @@
 
 #pragma mark-
 #pragma mark TMTreeNode
+@interface TMTreeNode ()
+@property(nonatomic, strong) NSMutableArray *childNodes;
+@end
 @implementation TMTreeNode
--(instancetype)init{
-    self=[super init];
-    if (self) {
-        _nodes=[[NSMutableArray alloc] init];
-        _parent=nil;
+-(NSMutableArray *)childNodes{
+    if (nil == _childNodes) {
+        [self setChildNodes:[NSMutableArray array]];
     }
-    return self;
+    return _childNodes;
 }
 -(NSArray *)nodes{
-    return [NSArray arrayWithArray:_nodes];
+    return [NSArray arrayWithArray:self.childNodes];
 }
 -(TMTreeNode*)addNode:(TMTreeNode*)temp{
-    [_nodes addObject:temp];
-    [temp setParent:self];
-    return temp;
+    @synchronized(self.childNodes) {
+        if (temp && [self.childNodes indexOfObject:temp] == NSNotFound) {
+            [self.childNodes addObject:temp];
+            [temp setParent:self];
+            return temp;
+        }
+        return nil;
+    }
+}
+-(TMTreeNode*)removeNode:(TMTreeNode*)temp{
+    @synchronized(self.childNodes) {
+        if (temp && [self.childNodes indexOfObject:temp] != NSNotFound) {
+            [self.childNodes removeObject:temp];
+            [temp setParent:nil];
+            return temp;
+        }
+        return nil;
+    }
 }
 @end
 
 
 #pragma mark-
 #pragma mark TMTree
-@interface TMTree()<UITableViewDataSource,UITableViewDelegate>
-@property(nonatomic,assign) id<UITreeDelegate> treeDelegate;
-@property(nonatomic,retain) TMTreeNode *treeRootNode;
+@interface TMTree () <UITableViewDataSource, UITableViewDelegate>
+@property(nonatomic, weak) id<TMTreeDelegate> treeDelegate;
+@property(nonatomic, strong) NSMutableArray *treeNodes;
+@property(nonatomic, strong) TMTreeNode *treeRootNode;
 @end
 @implementation TMTree
 @dynamic rootNode;
@@ -42,15 +59,19 @@
     self=[super initWithCoder:aDecoder];
     if (self) {
         [self setSeparatorStyle:UITableViewCellSeparatorStyleNone];
-        _treeNodes = [[NSMutableArray alloc] init];
-        //
         [super setAllowsMultipleSelection:YES];
         [super setDataSource:self];
         [super setDelegate:self];
     }
     return self;
 }
--(void)setDelegate:(id<UITreeDelegate>)delegate{
+-(NSMutableArray *)treeNodes{
+    if (nil == _treeNodes) {
+        [self setTreeNodes:[NSMutableArray array]];
+    }
+    return _treeNodes;
+}
+-(void)setDelegate:(id<TMTreeDelegate>)delegate{
     [self setTreeDelegate:delegate];
 }
 -(void)setDataSource:(id<UITableViewDataSource>)dataSource{
@@ -60,25 +81,25 @@
 //根节点
 -(void)setRootNode:(TMTreeNode *)value{
     [self setTreeRootNode:value];
-    [_treeRootNode setExpand:YES];
+    [self.treeRootNode setExpand:YES];
     [self displayNodes];
 }
 -(TMTreeNode *)rootNode{
     return [self treeRootNode];
 }
 -(NSArray*)visibleNodes{
-    return [NSArray arrayWithArray:_treeNodes];
+    return [NSArray arrayWithArray:self.treeNodes];
 }
 //取节点
 -(TMTreeNode*)nodeAtIndex:(NSInteger)index{
-    if (index<_treeNodes.count) {
-        return [_treeNodes objectAtIndex:index];
+    if (index<self.treeNodes.count) {
+        return [self.treeNodes objectAtIndex:index];
     }
     return nil;
 }
 -(NSInteger)indexAtNode:(TMTreeNode*)node{
     if (node) {
-        return [_treeNodes indexOfObject:node];
+        return [self.treeNodes indexOfObject:node];
     }
     return NSNotFound;
 }
@@ -96,58 +117,40 @@
 }
 //展开节点
 -(void)expandAll{
-    [self expand:_treeRootNode child:YES];
+    [self expand:self.treeRootNode child:YES];
 }
 -(void)expand:(TMTreeNode*)node{
     [self expand:node child:NO];
 }
 -(void)expand:(TMTreeNode*)node child:(BOOL)child{
     if (node) {
-        //取消选择
-        for (TMTreeNode *item in _treeNodes) {
-            [item setSelect:NO];
-        }
-        //展开父级树
-        TMTreeNode *top=node;
-        while (nil!=top.parent) {
-            if (top.nodes.count==0) {
-                [top setSelect:YES];
+        TMTreeNode *top = node;
+        while (nil != top) {
+            if (top.nodes.count == 0) {
                 [top setExpand: NO];
             }else{
-                [top setSelect:YES];
                 [top setExpand:YES];
             }
-            top=top.parent;
+            top = top.parent;
         }
-        //
-        if (node.nodes.count==0) {
-            [node setSelect:YES];
-            [node setExpand: NO];
-        }else{
-            [node setSelect:YES];
-            [node setExpand:YES];
-            //
-            if (child) {
-                for (TMTreeNode *item in node.nodes) {
-                    [self expand:item child:child];
-                }
+        if (node.nodes.count > 0 && child) {
+            for (TMTreeNode *item in node.nodes) {
+                [self expand:item child:child];
             }
         }
     }
 }
 //关闭节点
 -(void)collapseAll{
-    [self collapse:_treeRootNode child:YES];
+    [self collapse:self.treeRootNode child:YES];
 }
 -(void)collapse:(TMTreeNode*)node{
     [self collapse:node child:NO];
 }
 -(void)collapse:(TMTreeNode*)node child:(BOOL)child{
     if (node) {
-        [node setSelect:NO];
         [node setExpand:NO];
-        //
-        if (child) {
+        if (node.nodes.count > 0 && child) {
             for (TMTreeNode *item in node.nodes) {
                 [self collapse:item child:child];
             }
@@ -166,46 +169,46 @@
     return child;
 }
 -(void)displayNodes{
-    if (self.visibleCells.count==0) {
-        [_treeNodes removeAllObjects];
-        [_treeNodes addObjectsFromArray:[self effectiveNodes:_treeRootNode]];
+    if (self.visibleCells.count == 0) {
+        [self.treeNodes removeAllObjects];
+        [self.treeNodes addObjectsFromArray:[self effectiveNodes:self.treeRootNode]];
         [self reloadData];
     }else{
-        NSArray *oldCells=[NSArray arrayWithArray:_treeNodes];
-        NSArray *newCells=[self effectiveNodes:_treeRootNode];
+        NSArray *oldCells = [NSArray arrayWithArray:self.treeNodes];
+        NSArray *newCells = [self effectiveNodes:self.treeRootNode];
         //删除无效数据
-        [_treeNodes removeAllObjects];
-        NSMutableArray *delIndexPaths=[NSMutableArray array];
-        for (uint i=0;i<oldCells.count;i++) {
-            TMTreeNode *node=[oldCells objectAtIndex:i];
-            if (NO==[newCells containsObject:node]) {
+        [self.treeNodes removeAllObjects];
+        NSMutableArray *delIndexPaths = [NSMutableArray array];
+        for (uint i=0; i<oldCells.count; i++) {
+            TMTreeNode *node = [oldCells objectAtIndex:i];
+            if (NO == [newCells containsObject:node]) {
                 [delIndexPaths addObject:[NSIndexPath indexPathForItem:i inSection:0]];
             }else{
-                [_treeNodes addObject:node];
+                [self.treeNodes addObject:node];
             }
         }
-        if (delIndexPaths.count>0) {
+        if (delIndexPaths.count > 0) {
             [self deleteRowsAtIndexPaths:delIndexPaths withRowAnimation:UITableViewRowAnimationFade];
         }
         //插入新数据
-        [_treeNodes removeAllObjects];
-        NSMutableArray *addIndexPaths=[NSMutableArray array];
+        [self.treeNodes removeAllObjects];
+        NSMutableArray *addIndexPaths = [NSMutableArray array];
         for (uint i=0; i<newCells.count; i++) {
-            TMTreeNode *node=[newCells objectAtIndex:i];
-            if (NO==[oldCells containsObject:node]) {
+            TMTreeNode *node = [newCells objectAtIndex:i];
+            if (NO == [oldCells containsObject:node]) {
                 [addIndexPaths addObject:[NSIndexPath indexPathForItem:i inSection:0]];
             }
-            [_treeNodes addObject:node];
+            [self.treeNodes addObject:node];
         }
-        if (addIndexPaths.count>0) {
+        if (addIndexPaths.count > 0) {
             [self insertRowsAtIndexPaths:addIndexPaths withRowAnimation:UITableViewRowAnimationFade];
         }
     }
     //显示状态
-    for (NSInteger i=0;i<_treeNodes.count;i++) {
-        TMTreeNode *item=[_treeNodes objectAtIndex:i];
-        NSIndexPath *indexPath=[NSIndexPath indexPathForRow:i inSection:0];
-        if (item.select) {
+    for (NSInteger i=0; i<self.treeNodes.count; i++) {
+        TMTreeNode *item = [self.treeNodes objectAtIndex:i];
+        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:i inSection:0];
+        if (item.select || item.expand) {
             [self selectRowAtIndexPath:indexPath animated:NO scrollPosition:UITableViewScrollPositionNone];
         }else{
             [self deselectRowAtIndexPath:indexPath animated:NO];
@@ -213,54 +216,52 @@
     }
 }
 //
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section{
-    if ([_treeDelegate respondsToSelector:@selector(treeViewTitleForHeader:)]) {
-        return [_treeDelegate treeViewTitleForHeader:self];
-    }
-    return nil;
-}
 -(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath{
-    TMTreeNode *node=[self nodeAtIndex:indexPath.row];
-    if (node) {
-        if (node.expand || node.select) {
-            [self tableView:tableView didDeselectRowAtIndexPath:indexPath];
-        }else{
+    if ([self.treeDelegate respondsToSelector:@selector(treeView:didSelectRowAtIndex:)]) {
+        [self.treeDelegate treeView:self didSelectRowAtIndex:indexPath.row];
+    }else{
+        TMTreeNode *node = [self nodeAtIndex:indexPath.row];
+        if (node && node.expand == NO) {
             [self expand:node child:NO];
-            if ([_treeDelegate respondsToSelector:@selector(treeView:didSelectRowAtIndex:)]) {
-                [_treeDelegate treeView:self didSelectRowAtIndex:indexPath.row];
-            }
-            [self displayNodes];
         }
     }
+    [self displayNodes];
 }
 -(void)tableView:(UITableView *)tableView didDeselectRowAtIndexPath:(NSIndexPath *)indexPath{
-    TMTreeNode *node=[self nodeAtIndex:indexPath.row];
-    if (node) {
-        [self collapse:node child:NO];
-        if ([_treeDelegate respondsToSelector:@selector(treeView:didDeselectRowAtIndex:)]) {
-            [_treeDelegate treeView:self didDeselectRowAtIndex:indexPath.row];
+    if ([self.treeDelegate respondsToSelector:@selector(treeView:didDeselectRowAtIndex:)]) {
+        [self.treeDelegate treeView:self didDeselectRowAtIndex:indexPath.row];
+    }else{
+        TMTreeNode *node = [self nodeAtIndex:indexPath.row];
+        if (node && node.expand == YES) {
+            [self collapse:node child:NO];
         }
-        [self displayNodes];
     }
+    [self displayNodes];
 }
 -(NSInteger)tableView:(UITableView *)tableView indentationLevelForRowAtIndexPath:(NSIndexPath *)indexPath{
-    if (_indentation != 0) {
+    if (self.indentation != 0) {
         TMTreeNode *item = [self nodeAtIndex:indexPath.row];
-        return item.level * _indentation / 10;
+        return item.level * self.indentation / 10;
     }
     return 0;
 }
--(NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
-    return _treeNodes.count;
-}
 -(CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath{
-    if ([_treeDelegate respondsToSelector:@selector(treeView:heightForRowAtIndex:)]) {
-        return [_treeDelegate treeView:self heightForRowAtIndex:indexPath.row];
+    if ([self.treeDelegate respondsToSelector:@selector(treeView:heightForRowAtIndex:)]) {
+        return [self.treeDelegate treeView:self heightForRowAtIndex:indexPath.row];
     }
     return tableView.rowHeight;
 }
+-(NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section{
+    if ([self.treeDelegate respondsToSelector:@selector(treeViewTitleForHeader:)]) {
+        return [self.treeDelegate treeViewTitleForHeader:self];
+    }
+    return nil;
+}
+//
+-(NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
+    return self.treeNodes.count;
+}
 -(UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath{
-    UITableViewCell *cell=[_treeDelegate treeView:self cellForRowAtIndex:indexPath.row];
-    return cell;
+    return [self.treeDelegate treeView:self cellForRowAtIndex:indexPath.row];
 }
 @end
