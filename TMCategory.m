@@ -454,24 +454,25 @@ static NSString *imageViewSrc = @"imageView.src";
 -(void)load:(NSString*)file base:(NSString*)base{
     [self.prototype setValue:file forKey:imageViewSrc];
     //
-    BOOL isDirectory = NO;
     NSString *path = [NSString libraryAppend:file];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&isDirectory]) {
-        if (isDirectory == NO) {
-            UIImage *image = [[UIImageView cache] objectForKey:path];
-            if (image == nil) {
-                image = [UIImage imageWithContentsOfFile:path];
+    if (path) {
+        BOOL isDirectory = NO;
+        if ([[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&isDirectory]) {
+            if (isDirectory == NO) {
+                UIImage *image = [[UIImageView cache] objectForKey:path];
+                if (image == nil) {
+                    image = [UIImage imageWithContentsOfFile:path];
+                }
+                if (image) {
+                    [[UIImageView cache] setObject:image forKey:path];
+                    [self setImage:image];
+                }
+            }else{
+                [self setImage:nil];
             }
-            if (image) {
-                [[UIImageView cache] setObject:image forKey:path];
-                [self setImage:image];
-            }
-        }else{
-            [self setImage:nil];
+            return;
         }
-        return;
-    }
-    if (file) {
+        //
         if (base == nil) base = @"";
         NSString *app = [base stringByAppendingPathComponent:file];
         NSString *web = [app stringByReplacingOccurrencesOfString:@":/" withString:@"://"];
@@ -512,6 +513,8 @@ static NSString *imageViewSrc = @"imageView.src";
             [self setImage:nil];
             [task resume];
         }
+    }else{
+        [self setImage:nil];
     }
 }
 -(void)setSrc:(NSString *)src{
