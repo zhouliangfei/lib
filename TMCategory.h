@@ -46,7 +46,10 @@
 +(id)libraryAppend:(NSString *)path;
 +(id)uuid;
 //
+-(id)pathHash;
 -(id)toDate:(NSString*)format;
+-(id)aes256EncodedWithKey:(NSString *)key;
+-(id)aes256DecodedWithKey:(NSString *)key;
 -(id)base64Encoded;
 -(id)base64Decoded;
 -(id)md5;
@@ -89,7 +92,8 @@ typedef NS_ENUM(NSInteger, UIDeviceNetwork) {
 #pragma mark-
 #pragma mark UIImage
 @interface UIImage (Utils_Category)
--(UIImage*)insert:(CGSize)size;
+-(UIImage*)blendWithColor:(UIColor*)color;
+-(UIImage*)resize:(CGSize)size;
 @end
 
 
