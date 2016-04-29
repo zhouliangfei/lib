@@ -7,7 +7,6 @@
 //
 
 #import "TMGlobal.h"
-#import <CommonCrypto/CommonDigest.h>
 
 @implementation TMGlobal
 +(NSMutableDictionary*)shareInstance{
