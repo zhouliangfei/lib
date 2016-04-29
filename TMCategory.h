@@ -95,7 +95,7 @@ typedef NS_ENUM(NSInteger, UIDeviceNetwork) {
 
 #pragma mark-
 #pragma mark UIImageView
-@interface UIImageView (TMLoader)
+@interface UIImageView (Utils_Category)
 @property(copy, nonatomic) NSString *src;
 @property(strong, nonatomic) IBInspectable UIColor *blend;
 -(void)load:(NSString*)file base:(NSString*)base;
