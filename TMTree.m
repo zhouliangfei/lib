@@ -217,8 +217,8 @@
 }
 //
 -(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath{
-    if ([self.treeDelegate respondsToSelector:@selector(treeView:didSelectRowAtIndex:)]) {
-        [self.treeDelegate treeView:self didSelectRowAtIndex:indexPath.row];
+    if ([self.treeDelegate respondsToSelector:@selector(treeView:expandRowAtIndex:)]) {
+        [self.treeDelegate treeView:self expandRowAtIndex:indexPath.row];
     }else{
         TMTreeNode *node = [self nodeAtIndex:indexPath.row];
         if (node && node.expand == NO) {
@@ -228,8 +228,8 @@
     [self displayNodes];
 }
 -(void)tableView:(UITableView *)tableView didDeselectRowAtIndexPath:(NSIndexPath *)indexPath{
-    if ([self.treeDelegate respondsToSelector:@selector(treeView:didDeselectRowAtIndex:)]) {
-        [self.treeDelegate treeView:self didDeselectRowAtIndex:indexPath.row];
+    if ([self.treeDelegate respondsToSelector:@selector(treeView:collapseRowAtIndex:)]) {
+        [self.treeDelegate treeView:self collapseRowAtIndex:indexPath.row];
     }else{
         TMTreeNode *node = [self nodeAtIndex:indexPath.row];
         if (node && node.expand == YES) {
