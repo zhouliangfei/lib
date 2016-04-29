@@ -9,42 +9,39 @@
 #import <UIKit/UIKit.h>
 
 #pragma mark-
-#pragma mark UITreeDelegate
+#pragma mark TMTreeDelegate
 @class TMTree;
-@protocol UITreeDelegate <UITableViewDelegate>
+@protocol TMTreeDelegate <UITableViewDelegate>
 @required
 -(UITableViewCell *)treeView:(TMTree *)treeView cellForRowAtIndex:(NSInteger)index;
 
 @optional
 -(CGFloat)treeView:(TMTree *)treeView heightForRowAtIndex:(NSInteger)index;
--(void)treeView:(TMTree *)treeView didDeselectRowAtIndex:(NSInteger)index;
--(void)treeView:(TMTree *)treeView didSelectRowAtIndex:(NSInteger)index;
+-(void)treeView:(TMTree *)treeView collapseRowAtIndex:(NSInteger)index;
+-(void)treeView:(TMTree *)treeView expandRowAtIndex:(NSInteger)index;
 -(id)treeViewTitleForHeader:(TMTree *)treeView;
 @end
 
 
 #pragma mark-
 #pragma mark TMTreeNode
-@interface TMTreeNode : NSObject{
-    NSMutableArray *_nodes;
-}
-@property(nonatomic,retain) id value;
-@property(nonatomic,readonly) NSArray *nodes;
-@property(nonatomic,retain) TMTreeNode *parent;
-@property(nonatomic,retain) NSString *label;
+@interface TMTreeNode : NSObject
+@property(nonatomic,strong) id value;
+@property(nonatomic,strong) NSArray *nodes;
+@property(nonatomic,strong) TMTreeNode *parent;
+@property(nonatomic,strong) NSString *label;
 @property(nonatomic,assign) NSInteger idetify;
 @property(nonatomic,assign) NSInteger level;
 @property(nonatomic,assign) BOOL select;
 @property(nonatomic,assign) BOOL expand;
 -(TMTreeNode*)addNode:(TMTreeNode*)nodes;
+-(TMTreeNode*)removeNode:(TMTreeNode*)temp;
 @end
 
 
 #pragma mark-
 #pragma mark TMTree
-@interface TMTree : UITableView{
-    NSMutableArray *_treeNodes;
-}
+@interface TMTree : UITableView
 @property(nonatomic,assign) IBInspectable CGFloat indentation;
 @property(nonatomic,readonly) NSArray *visibleNodes;
 @property(nonatomic,retain) TMTreeNode *rootNode;
