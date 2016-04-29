@@ -12,6 +12,7 @@
 #pragma mark-
 #pragma mark NSObject
 @interface NSObject (Utils_Category);
+@property(nonatomic, readonly) NSMutableDictionary *prototype;
 -(id)duplicate;
 @end
 
@@ -32,7 +33,7 @@
 #pragma mark NSDate
 @interface NSDate (Utils_Category)
 @property(nonatomic,readonly) NSDateComponents *components;
--(id)stringFromFormatter:(NSString*)format;
+-(id)toString:(NSString*)format;
 @end
 
 
@@ -45,7 +46,7 @@
 +(id)libraryAppend:(NSString *)path;
 +(id)uuid;
 //
--(id)dateFromFormatter:(NSString*)format;
+-(id)toDate:(NSString*)format;
 -(id)base64Encoded;
 -(id)base64Decoded;
 -(id)md5;
@@ -96,4 +97,6 @@ typedef NS_ENUM(NSInteger, UIDeviceNetwork) {
 #pragma mark UIImageView
 @interface UIImageView (TMLoader)
 @property(copy, nonatomic) NSString *src;
+@property(strong, nonatomic) IBInspectable UIColor *blend;
+-(void)load:(NSString*)file base:(NSString*)base;
 @end
