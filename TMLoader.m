@@ -15,8 +15,8 @@
     unsigned long long bytesLoaded;
     unsigned long long bytesTotal;
 }
-@property(nonatomic, copy) NSString *filePath;
 @property(nonatomic, copy) NSString *tempPath;
+@property(nonatomic, copy) NSString *filePath;
 @property(nonatomic, strong) NSData *cacheData;
 @property(nonatomic, assign) NSInteger cacheType;
 @property(nonatomic, strong) NSURLRequest *currentRequest;
@@ -53,17 +53,6 @@
         return loader;
     }
     return nil;
-}
-+(NSString*)hash:(NSString*)hash{
-    if (hash) {
-        NSString *src = [hash md5];
-        NSString *ext = [hash pathExtension];
-        if (ext && [ext length] > 0) {
-            return [src stringByAppendingPathExtension:ext];
-        }
-        return src;
-    }
-    return @"";
 }
 +(void)cancel{
     [[TMLoader queue] cancelAllOperations];
@@ -107,8 +96,12 @@
     return self.filePath;
 }
 -(NSData *)data{
-    if ([self cacheData]) {
-        return [self cacheData];
+    if (self.cacheType == 0) {
+        if (self.cacheData == nil) {
+            [self setCacheData:[NSData dataWithContentsOfFile:self.filePath]];
+            [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
+        }
+        return self.cacheData;
     }
     return [NSData dataWithContentsOfFile:self.filePath];
 }
@@ -124,11 +117,12 @@
         [self setDelegate:delegate];
         [self setCurrentRequest:request];
         //
-        if (name == nil) {
-            name = [TMLoader hash:request.URL.absoluteString];
+        [self setName:name];
+        if (self.name == nil) {
+            [self setName:[request.URL.absoluteString pathHash]];
         }
         //
-        [self setFilePath:[NSString libraryAppend:name]];
+        [self setFilePath:[NSString libraryAppend:self.name]];
         if (self.cacheType==2 && [[NSFileManager defaultManager] fileExistsAtPath:self.filePath]) {
             if (self.delegate) {
                 bytesTotal = bytesLoaded = [[[NSFileManager defaultManager] attributesOfItemAtPath:self.filePath error:nil] fileSize];
@@ -136,7 +130,7 @@
             }
             [self cancel];
         }else{
-            [self setTempPath:[NSString temporaryAppend:name]];
+            [self setTempPath:[NSString temporaryAppend:self.name]];
             if ([[NSFileManager defaultManager] fileExistsAtPath:self.tempPath]) {
                 if ([self.currentRequest respondsToSelector:@selector(addValue:forHTTPHeaderField:)]) {
                     bytesLoaded = [[[NSFileManager defaultManager] attributesOfItemAtPath:self.tempPath error:nil] fileSize];
@@ -188,19 +182,12 @@
     }
 }
 -(void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(nullable NSError *)error{
-    NSString *tempPath = [self tempPath];
     if (error == nil) {
-        if ([[NSFileManager defaultManager] fileExistsAtPath:tempPath]) {
-            NSString *filePath = [self filePath];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
-                [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:self.tempPath]) {
+            if ([[NSFileManager defaultManager] fileExistsAtPath:self.filePath]) {
+                [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
             }
-            if (self.cacheType == 0) {
-                [self setCacheData:[NSData dataWithContentsOfFile:tempPath]];
-                [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
-            }else{
-                [[NSFileManager defaultManager] moveItemAtPath:tempPath toPath:filePath error:nil];
-            }
+            [[NSFileManager defaultManager] moveItemAtPath:self.tempPath toPath:self.filePath error:nil];
         }
     }
     [self onComplete:error];
