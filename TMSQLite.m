@@ -12,7 +12,7 @@
 //
 #ifndef TMSQLite_m
 #define TMSQLite_m
-    #define SQLITE_VOID       0xFF
+#define SQLITE_VOID       0xFF
 #endif
 
 //sqlite类型名称
@@ -43,14 +43,14 @@ static NSString* sqliteReviseValue(id type,id value){
     if (SQLITE_TEXT == [type intValue]) {
         if (value && value != [NSNull null]) {
             /*NSString *string=[value stringByReplacingOccurrencesOfString:@"/" withString:@"//"];
-            string=[string stringByReplacingOccurrencesOfString:@"'" withString:@"''"];
-            string=[string stringByReplacingOccurrencesOfString:@"[" withString:@"/["];
-            string=[string stringByReplacingOccurrencesOfString:@"]" withString:@"/]"];
-            string=[string stringByReplacingOccurrencesOfString:@"%" withString:@"/%"];
-            string=[string stringByReplacingOccurrencesOfString:@"&" withString:@"/&"];
-            string=[string stringByReplacingOccurrencesOfString:@"_" withString:@"/_"];
-            string=[string stringByReplacingOccurrencesOfString:@"(" withString:@"/("];
-            string=[string stringByReplacingOccurrencesOfString:@")" withString:@"/)"];*/
+             string=[string stringByReplacingOccurrencesOfString:@"'" withString:@"''"];
+             string=[string stringByReplacingOccurrencesOfString:@"[" withString:@"/["];
+             string=[string stringByReplacingOccurrencesOfString:@"]" withString:@"/]"];
+             string=[string stringByReplacingOccurrencesOfString:@"%" withString:@"/%"];
+             string=[string stringByReplacingOccurrencesOfString:@"&" withString:@"/&"];
+             string=[string stringByReplacingOccurrencesOfString:@"_" withString:@"/_"];
+             string=[string stringByReplacingOccurrencesOfString:@"(" withString:@"/("];
+             string=[string stringByReplacingOccurrencesOfString:@")" withString:@"/)"];*/
             NSString *string = [value stringByReplacingOccurrencesOfString:@"'" withString:@"''"];
             return [NSString stringWithFormat:@"\'%@\'",string];
         }
@@ -144,7 +144,8 @@ static int sqliteConverType(NSString *type){
 @interface TMSQLite()<TMTransactionDelegate>{
     sqlite3 *database;
 }
-@property(assign, nonatomic) BOOL conned;
+@property(strong, atomic) NSThread *thread;
+@property(assign, atomic) BOOL conned;
 @end
 @implementation TMSQLite
 +(TMSQLite*)shareInstance{
@@ -155,38 +156,55 @@ static int sqliteConverType(NSString *type){
     });
     return instance;
 }
--(TMTransaction*)transaction{
-    if (_transaction == nil) {
+-(instancetype)init{
+    self = [super init];
+    if (self) {
         [self setTransaction:[[TMTransaction alloc] init]];
+        [self setThread:[NSThread currentThread]];
     }
-    return _transaction;
+    return self;
 }
--(long long int)lastInsertId{
+-(int)lastInsertId{
     if (self.conned){
-        return sqlite3_last_insert_rowid(database);
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(lastInsertId) args:nil];
+            return [result intValue];
+        }
+        return (int)sqlite3_last_insert_rowid(database);
     }
     return 0;
 }
 -(int)changes{
     if (self.conned){
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(changes) args:nil];
+            return [result intValue];
+        }
         return sqlite3_changes(database);
     }
     return 0;
 }
-//
 -(BOOL)connect:(NSString*)path{
-    if (self.conned) {
-        return YES;
-    }
-    if (SQLITE_OK == sqlite3_open_v2([path UTF8String], &database, SQLITE_CONFIG_MULTITHREAD, NULL)) {
-        [self.transaction setDelegate:self];
-        [self setConned:YES];
-        return YES;
+    if (self.conned == NO) {
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(connect:) args:[NSArray arrayWithObject:path]];
+            return [result boolValue];
+        }
+        if (SQLITE_OK == sqlite3_open_v2([path UTF8String], &database, SQLITE_CONFIG_MULTITHREAD, NULL)) {
+            [self.transaction setDelegate:self];
+            [self setConned:YES];
+            return YES;
+        }
     }
     return NO;
 }
 -(id)query:(NSString *)sql{
     if (self.conned){
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(query:) args:[NSArray arrayWithObject:sql]];
+            return result;
+        }
+        //
         sqlite3_stmt *statement = NULL;
         if (SQLITE_OK == sqlite3_prepare_v2(database, [sql UTF8String], -1, &statement, NULL)){
             int step = sqlite3_step(statement);
@@ -194,12 +212,8 @@ static int sqliteConverType(NSString *type){
                 int readonly = sqlite3_stmt_readonly(statement);
                 sqlite3_finalize(statement);
                 if (readonly == 0) {
-                    if (sqlite3_changes(database) > 0) {
-                        return [NSNumber numberWithBool:YES];
-                    }
-                    return [NSNumber numberWithBool:NO];
+                    return [NSNumber numberWithBool:YES];
                 }
-                return nil;
             }
             if (step == SQLITE_ROW) {
                 int length = sqlite3_column_count(statement);
@@ -243,38 +257,102 @@ static int sqliteConverType(NSString *type){
     return nil;
 }
 -(BOOL)close{
-    if (self.conned && SQLITE_OK == sqlite3_close_v2(database)) {
-        [self.transaction setDelegate:nil];
-        [self setConned:NO];
-        database = NULL;
-        return YES;
+    if (self.conned) {
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(close) args:nil];
+            return [result boolValue];
+        }
+        if (SQLITE_OK == sqlite3_close_v2(database)) {
+            [self.transaction setDelegate:nil];
+            [self setConned:NO];
+            database = NULL;
+            return YES;
+        }
     }
     return NO;
 }
-//
 -(BOOL)transactionEnd{
-    if(self.conned && SQLITE_OK == sqlite3_exec(database, [@"END TRANSACTION" UTF8String], 0, 0, NULL)){
-        return YES;
+    if(self.conned){
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(transactionEnd) args:nil];
+            return [result boolValue];
+        }
+        NSString *sql = @"END TRANSACTION";
+        if (SQLITE_OK == sqlite3_exec(database, [sql UTF8String], 0, 0, NULL)) {
+            return YES;
+        }
     }
     return NO;
 }
 -(BOOL)transactionBegin{
-    if(self.conned && SQLITE_OK == sqlite3_exec(database, [@"BEGIN TRANSACTION" UTF8String], 0, 0, NULL)){
-        return YES;
+    if(self.conned){
+        if ([NSThread isMainThread] == NO) {
+            id result = [self cmd:@selector(transactionBegin) args:nil];
+            return [result boolValue];
+        }
+        NSString *sql = @"BEGIN TRANSACTION";
+        if (SQLITE_OK == sqlite3_exec(database, [sql UTF8String], 0, 0, NULL)) {
+            return YES;
+        }
     }
     return NO;
 }
 -(BOOL)transactionCommit{
-    if(self.conned && SQLITE_OK == sqlite3_exec(database, [@"COMMIT TRANSACTION" UTF8String], 0, 0, NULL)){
-        return YES;
+    if(self.conned){
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(transactionCommit) args:nil];
+            return [result boolValue];
+        }
+        NSString *sql = @"COMMIT TRANSACTION";
+        if (SQLITE_OK == sqlite3_exec(database, [sql UTF8String], 0, 0, NULL)) {
+            return YES;
+        }
     }
     return NO;
 }
 -(BOOL)transactionRollback{
-    if(self.conned && SQLITE_OK == sqlite3_exec(database, [@"ROLLBACK TRANSACTION" UTF8String], 0, 0, NULL)){
-        return YES;
+    if(self.conned){
+        if ([NSThread currentThread] != self.thread) {
+            id result = [self cmd:@selector(transactionRollback) args:nil];
+            return [result boolValue];
+        }
+        NSString *sql = @"ROLLBACK TRANSACTION";
+        if (SQLITE_OK == sqlite3_exec(database, [sql UTF8String], 0, 0, NULL)) {
+            return YES;
+        }
     }
     return NO;
+}
+-(id)cmd:(SEL)selector args:(NSArray*)args{
+    NSMethodSignature *method = [self.class instanceMethodSignatureForSelector:selector];
+    NSInvocation * invocation = [NSInvocation invocationWithMethodSignature:method];
+    if (args && [args count] > 0) {
+        for (NSUInteger i=0;i<[args count];i++) {
+            id arg = [args objectAtIndex:i];
+            [invocation setArgument:&arg atIndex:2 + i];
+        }
+    }
+    [invocation retainArguments];
+    [invocation setSelector:selector];
+    [invocation performSelector:@selector(invokeWithTarget:) onThread:self.thread withObject:self waitUntilDone:YES];
+    //
+    NSUInteger len = method.methodReturnLength;
+    if (len > 0) {
+        const char *type = method.methodReturnType;
+        if(!strcmp(type, @encode(id)) ){
+            id __unsafe_unretained data = nil;
+            [invocation getReturnValue:&data];
+            return data;
+        }
+        //
+        void *buffer = (void *)malloc(len);
+        [invocation getReturnValue:buffer];
+        if(!strcmp(type, @encode(BOOL)) || !strcmp(type, @encode(int))) {
+            return [NSNumber numberWithChar:*((char*)buffer)];
+        }
+        return [NSValue valueWithBytes:buffer objCType:type];
+    }
+    return nil;
 }
 @end
 
