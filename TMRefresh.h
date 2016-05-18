@@ -16,14 +16,15 @@ typedef NS_OPTIONS(NSUInteger, TMRefreshType) {
 
 
 typedef NS_OPTIONS(NSUInteger, TMRefreshState) {
-    TMRefreshStateNormal = UIControlStateNormal,
-    TMRefreshStatePulling = UIControlStateDisabled,
-    TMRefreshStateRefreshing = UIControlStateSelected
+    TMRefreshStateNormal,
+    TMRefreshStatePulling,
+    TMRefreshStateRefreshing
 };
 
 
 @interface TMRefresh : UIControl
-@property(nonatomic, assign) BOOL refreshing;
+@property(nonatomic, assign) BOOL finish;
+@property(nonatomic, readonly, getter=isRefreshing) BOOL refreshing;
 - (instancetype)initWithType:(TMRefreshType)type;
 - (void)setTitle:(NSString *)title forState:(TMRefreshState)state;
 - (void)beginRefreshing;
