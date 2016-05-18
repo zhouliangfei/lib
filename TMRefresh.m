@@ -102,6 +102,7 @@
         }else{
             if ([keyPath isEqualToString:@"state"] && [[change valueForKey:NSKeyValueChangeNewKey] integerValue] == UIGestureRecognizerStateEnded) {
                 [self beginRefreshing];
+                [self sendActionsForControlEvents:UIControlEventValueChanged];
             }else{
                 if (self.scrollView.isTracking && self.scrollView.isDragging) {
                     [self.indicator setTransform:CGAffineTransformMakeRotation(ty * M_PI * 2)];
@@ -150,7 +151,6 @@
         [UIView commitAnimations];
         //
         [self setOriginalOffset:self.scrollView.contentOffset];
-        [self sendActionsForControlEvents:UIControlEventValueChanged];
     }
 }
 - (void)endRefreshing{
