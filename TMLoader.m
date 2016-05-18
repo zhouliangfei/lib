@@ -117,9 +117,10 @@
         [self setDelegate:delegate];
         [self setCurrentRequest:request];
         //
-        [self setName:name];
-        if (self.name == nil) {
+        if (name == nil) {
             [self setName:[request.URL.absoluteString pathHash]];
+        }else{
+            [self setName:name];
         }
         //
         [self setFilePath:[NSString libraryAppend:self.name]];
@@ -130,7 +131,7 @@
             }
             [self cancel];
         }else{
-            [self setTempPath:[NSString temporaryAppend:self.name]];
+            [self setTempPath:[NSString temporaryAppend:[self.name pathHash]]];
             if ([[NSFileManager defaultManager] fileExistsAtPath:self.tempPath]) {
                 if ([self.currentRequest respondsToSelector:@selector(addValue:forHTTPHeaderField:)]) {
                     bytesLoaded = [[[NSFileManager defaultManager] attributesOfItemAtPath:self.tempPath error:nil] fileSize];
@@ -184,8 +185,10 @@
 -(void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(nullable NSError *)error{
     if (error == nil) {
         if ([[NSFileManager defaultManager] fileExistsAtPath:self.tempPath]) {
-            if ([[NSFileManager defaultManager] fileExistsAtPath:self.filePath]) {
-                [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
+            BOOL isDir = NO;
+            NSString *path = [self.filePath stringByDeletingLastPathComponent];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&isDir] == NO && isDir) {
+                [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
             }
             [[NSFileManager defaultManager] moveItemAtPath:self.tempPath toPath:self.filePath error:nil];
         }
