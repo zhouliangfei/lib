@@ -19,13 +19,15 @@
 @property(nonatomic, assign) UIEdgeInsets scrollInset;
 @property(nonatomic, assign) CGPoint originalOffset;
 @property(nonatomic, assign) TMRefreshType type;
+@property(nonatomic, assign) NSInteger current;
 @property(nonatomic, assign) BOOL refresh;
 @end
 @implementation TMRefresh
 - (instancetype)initWithType:(TMRefreshType)type{
     self = [super initWithFrame:CGRectZero];
     if (self) {
-        [self setEnabled:NO];
+        [self setType:type];
+        [self setEnabled:YES];
         [self setUserInteractionEnabled:NO];
         //
         [self setIndicator:[[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray]];
@@ -36,8 +38,6 @@
         [self.title setFont:[UIFont boldSystemFontOfSize:10]];
         [self.title setTextColor:[UIColor darkGrayColor]];
         [self addSubview:self.title];
-        //
-        [self setType:type];
     }
     return self;
 }
@@ -52,21 +52,19 @@
     if ([newSuperview isKindOfClass:UIScrollView.class]) {
         [self setScrollView:(UIScrollView*)newSuperview];
         if (self.scrollView.alwaysBounceVertical == YES) {
-            [self setNeedsLayout];
+            [self layoutIfNeeded];
             [self addObserver];
         }
     }
 }
 - (void)layoutSubviews{
     [super layoutSubviews];
-    [self setHidden:self.finish];
-    //
-    if (self.hidden == NO) {
+    if (self.enabled) {
         static CGFloat height = 60.f;
         if (self.type == TMRefreshTypeHeader) {
-            [self setFrame:CGRectMake(0, 0 - height, self.scrollView.frame.size.width, height)];
+            [self setFrame:CGRectMake(0, 0 - height, self.scrollView.bounds.size.width, height)];
         }else{
-            [self setFrame:CGRectMake(0, MAX(self.scrollView.frame.size.height, self.scrollView.contentSize.height), self.scrollView.frame.size.width, height)];
+            [self setFrame:CGRectMake(0, MAX(self.scrollView.bounds.size.height, self.scrollView.contentSize.height), self.scrollView.bounds.size.width, height)];
         }
         //
         CGFloat th = self.title.bounds.size.height;
@@ -83,58 +81,65 @@
         return;
     }
     if ([keyPath isEqualToString:@"contentSize"]){
-        [self setNeedsLayout];
+        [self layoutIfNeeded];
+        return;
+    }
+    //
+    CGFloat ty = 0;
+    if (self.type == TMRefreshTypeHeader) {
+        ty = 0 - self.scrollView.contentOffset.y;
     }else{
-        CGFloat ty = 0;
-        if (self.type == TMRefreshTypeHeader) {
-            ty = 0 - self.scrollView.contentOffset.y;
+        ty = self.scrollView.contentOffset.y - MAX(self.scrollView.contentSize.height - self.scrollView.frame.size.height, 0);
+    }
+    if (ty < 0) {
+        return;
+    }
+    //
+    ty = MIN(1, MAX(0, ty / self.bounds.size.height));
+    if (ty < 1) {
+        [self.indicator setTransform:CGAffineTransformMakeRotation(ty * M_PI * 2)];
+        [self updataTitle:TMRefreshStatePulling];
+    }else{
+        if ([keyPath isEqualToString:@"state"] && [[change valueForKey:NSKeyValueChangeNewKey] integerValue] == UIGestureRecognizerStateEnded) {
+            [self beginRefreshing];
+            [self sendActionsForControlEvents:UIControlEventValueChanged];
         }else{
-            ty = self.scrollView.contentOffset.y - MAX(self.scrollView.contentSize.height - self.scrollView.frame.size.height, 0);
-        }
-        if (ty < 0) {
-            return;
-        }
-        //
-        ty = MIN(1, MAX(0, ty / self.bounds.size.height));
-        if (ty < 1) {
-            [self.indicator setTransform:CGAffineTransformMakeRotation(ty * M_PI * 2)];
-            [self updataTitle:UIControlStateNormal];
-        }else{
-            if ([keyPath isEqualToString:@"state"] && [[change valueForKey:NSKeyValueChangeNewKey] integerValue] == UIGestureRecognizerStateEnded) {
-                [self beginRefreshing];
-                [self sendActionsForControlEvents:UIControlEventValueChanged];
-            }else{
-                if (self.scrollView.isTracking && self.scrollView.isDragging) {
-                    [self.indicator setTransform:CGAffineTransformMakeRotation(ty * M_PI * 2)];
-                    [self updataTitle:UIControlStateDisabled];
-                }
+            if (self.scrollView.isTracking && self.scrollView.isDragging) {
+                [self.indicator setTransform:CGAffineTransformMakeRotation(ty * M_PI * 2)];
+                [self updataTitle:TMRefreshStateNormal];
             }
         }
     }
 }
-- (void)updataTitle:(UIControlState)state{
-    NSString *key = [NSString stringWithFormat:@"%lu",(unsigned long)state];
-    [self.title setText:[NSString stringWithFormat:@"%@",[self.titles objectForKey:key]]];
-    [self.title sizeToFit];
-    [self layoutSubviews];
-}
-//
--(void)setFinish:(BOOL)finish{
+-(void)setEnabled:(BOOL)enabled{
+    [super setEnabled:NO];
     if (self.type == TMRefreshTypeFooter) {
-        [self setHidden:finish];
+        [self setHidden:!enabled];
     }else{
         [self setHidden:NO];
     }
 }
--(BOOL)finish{
-    return self.hidden;
+-(BOOL)isEnabled{
+    return !self.hidden;
 }
+//
 -(BOOL)isRefreshing{
     return self.refresh;
 }
+- (void)updataTitle:(TMRefreshState)state{
+    if (self.current != state) {
+        [self setCurrent:state];
+        //
+        NSString *key = [NSString stringWithFormat:@"%lu",(unsigned long)state];
+        [self.title setText:[NSString stringWithFormat:@"%@",[self.titles objectForKey:key]]];
+        [self.title sizeToFit];
+    }
+    [self layoutIfNeeded];
+}
 -(void)beginRefreshing{
-    if (self.finish == NO && self.refresh == NO) {
+    if (self.refresh == NO) {
         [self setRefresh:YES];
+        [self updataTitle:TMRefreshStateRefreshing];
         //
         if (self.type == TMRefreshTypeHeader) {
             UIEdgeInsets insets = self.originalInset;
@@ -154,13 +159,14 @@
     }
 }
 - (void)endRefreshing{
-    if (self.finish == NO && self.refresh == YES) {
-        [NSThread sleepForTimeInterval:1];
+    [NSThread sleepForTimeInterval:1];
+    if (self.refresh == YES) {
         [self setRefresh:NO];
+        [self updataTitle:TMRefreshStateNormal];
         //
         [self.indicator stopAnimating];
         [self.scrollView setScrollEnabled:YES];
-        if (self.type == TMRefreshTypeFooter && self.finish == NO) {
+        if (self.type == TMRefreshTypeFooter && self.enabled == YES) {
             [UIView beginAnimations:nil context:nil];
             [self.scrollView setContentInset:self.originalInset];
             [self.scrollView setContentOffset:self.originalOffset];
@@ -188,7 +194,7 @@
 - (void)setTitle:(NSString *)title forState:(TMRefreshState)state{
     NSString *key = [NSString stringWithFormat:@"%lu",(unsigned long)state];
     [self.titles setValue:title forKey:key];
-    [self setNeedsLayout];
+    [self updataTitle:self.current];
 }
 - (NSMutableDictionary *)titles{
     if (_titles == nil) {
