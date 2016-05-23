@@ -81,7 +81,7 @@
         return;
     }
     if ([keyPath isEqualToString:@"contentSize"]){
-        [self layoutIfNeeded];
+        [self setNeedsLayout];
         return;
     }
     //
