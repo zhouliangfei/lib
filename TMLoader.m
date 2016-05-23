@@ -185,9 +185,8 @@
 -(void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(nullable NSError *)error{
     if (error == nil) {
         if ([[NSFileManager defaultManager] fileExistsAtPath:self.tempPath]) {
-            BOOL isDir = NO;
             NSString *path = [self.filePath stringByDeletingLastPathComponent];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&isDir] == NO && isDir) {
+            if ([[NSFileManager defaultManager] fileExistsAtPath:path] == NO) {
                 [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
             }
             [[NSFileManager defaultManager] moveItemAtPath:self.tempPath toPath:self.filePath error:nil];
