@@ -143,6 +143,7 @@
             }else{
                 [[NSFileManager defaultManager] createFileAtPath:self.tempPath contents:nil attributes:nil];
             }
+            //
             if (self.delegate) {
                 [[TMLoader queue] addOperation:self];
             }else{
@@ -158,14 +159,16 @@
 -(void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data{
     NSHTTPURLResponse *response = (NSHTTPURLResponse*)dataTask.response;
     if (response.statusCode == 200 || response.statusCode == 206) {
-        if (response.statusCode == 200) {
-            bytesTotal = dataTask.countOfBytesExpectedToReceive;
-        }else{
-            NSString *contentRange = [response.allHeaderFields valueForKey:@"Content-Range"];
-            if ([contentRange hasPrefix:@"bytes"]) {
-                NSArray *bytes = [contentRange componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" -/"]];
-                if ([bytes count] == 4) {
-                    bytesTotal = [[bytes objectAtIndex:3] longLongValue];
+        if (bytesTotal == 0) {
+            if (response.statusCode == 200) {
+                bytesTotal = dataTask.countOfBytesExpectedToReceive;
+            }else{
+                NSString *contentRange = [response.allHeaderFields valueForKey:@"Content-Range"];
+                if ([contentRange hasPrefix:@"bytes"]) {
+                    NSArray *bytes = [contentRange componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" -/"]];
+                    if ([bytes count] == 4) {
+                        bytesTotal = [[bytes objectAtIndex:3] longLongValue];
+                    }
                 }
             }
         }
@@ -188,8 +191,16 @@
             NSString *path = [self.filePath stringByDeletingLastPathComponent];
             if ([[NSFileManager defaultManager] fileExistsAtPath:path] == NO) {
                 [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:nil];
+            }else{
+                if ([[NSFileManager defaultManager] fileExistsAtPath:self.filePath]) {
+                    [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
+                }
             }
             [[NSFileManager defaultManager] moveItemAtPath:self.tempPath toPath:self.filePath error:nil];
+        }
+    }else{
+        if ([[NSFileManager defaultManager] fileExistsAtPath:self.tempPath]) {
+            [[NSFileManager defaultManager] removeItemAtPath:self.tempPath error:nil];
         }
     }
     [self onComplete:error];
